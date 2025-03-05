@@ -1,12 +1,87 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>Hello World!</title>
-    <link rel="stylesheet" href="index.css" />
-  </head>
+<!doctype html>
+<html lang="en">
   <body>
-    <h1>💖 Hello World!</h1>
-    <p>Welcome to your Electron application.</p>
+    <pre class="mermaid">
+  graph LR
+      A --- B
+      B-->C[fa:fa-ban forbidden]
+      B-->D(fa:fa-spinner);
+    </pre>
+    <pre class="mermaid">
+      classDiagram
+          class User {
+              +int id
+              +string username
+              +string email
+              +string password
+              +DateTime createdAt
+              +login()
+              +logout()
+              +updateProfile()
+          }
+      
+          class AuthService {
+              +authenticate(username: string, password: string)
+              +register(user: User)
+              +resetPassword(email: string)
+              +generateToken()
+          }
+      
+          class ProductController {
+              +listProducts()
+              +getProductDetails(id: int)
+              +createProduct(product: Product)
+              +updateProduct(id: int, product: Product)
+              +deleteProduct(id: int)
+          }
+      
+          class Product {
+              +int id
+              +string name
+              +string description
+              +float price
+              +int stockQuantity
+              +Category category
+              +updateStock(quantity: int)
+          }
+      
+          class Category {
+              +int id
+              +string name
+              +string description
+              +listProducts()
+          }
+      
+          class ShoppingCart {
+              +List~Product~ items
+              +float totalPrice
+              +addItem(product: Product)
+              +removeItem(product: Product)
+              +calculateTotal()
+              +checkout()
+          }
+      
+          class Order {
+              +int id
+              +User user
+              +List~Product~ orderItems
+              +float totalAmount
+              +DateTime orderDate
+              +string status
+              +processPayment()
+              +generateInvoice()
+          }
+      
+          User "1" -- "0..*" Order : places
+          User "1" -- "1" ShoppingCart : has
+          Product "0..*" -- "1" Category : belongs to
+          Order "0..*" -- "1" User : belongs to
+          ShoppingCart "1" -- "0..*" Product : contains
+          AuthService -- User : manages
+          ProductController -- Product : manages
+    </pre>
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    </script>
   </body>
 </html>
