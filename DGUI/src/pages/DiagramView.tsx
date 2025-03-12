@@ -1,9 +1,11 @@
 import { dia, shapes } from '@joint/core'
 import React, { useEffect, useRef } from 'react';
 
+interface DiagramViewProps {
+    fileDir: string;
+}
 
-
-const DiagramView: React.FC = () => {
+const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
     const paperRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
