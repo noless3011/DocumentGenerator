@@ -6,13 +6,18 @@ import io
 import uuid
 from PIL import ImageGrab
 from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 import pythoncom
 from werkzeug.utils import secure_filename
 
 
 
 app = Flask(__name__)
-
+@app.after_request
+def add_csp_header(response):
+    response.headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline' data:; connect-src 'self' http://localhost:5000"
+    return response
+CORS(app)
 # Configuration for file uploads
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
@@ -104,9 +109,9 @@ def process_excel_sheets(excel_file_path, output_folder, sheet_types):
     # Extract filename without extension
     base_filename = os.path.splitext(os.path.basename(excel_file_path))[0]
      # Initialize COM for the thread
-    pythoncom.CoInitialize()
-   
     
+    pythoncom.CoInitialize()
+
     result = {}
     
     try:
@@ -278,7 +283,6 @@ def api_process_excel():
     Expected JSON payload:
     {
         "file_id": "filename_uuid.xlsx",
-        "output_folder": "/path/to/output",
         "sheets": {
             "Sheet1": "ui",
             "Sheet2": "table"
@@ -289,20 +293,30 @@ def api_process_excel():
         data = request.json
         
         # Validate required fields
-        if not all(key in data for key in ['file_id', 'output_folder', 'sheets']):
+        if not all(key in data for key in ['file_id', 'sheets']):
             return jsonify({
-                "error": "Missing required fields. Required: file_id, output_folder, sheets"
+                "error": "Missing required fields. Required: file_id, sheets"
             }), 400
         
         # Construct the actual file path from the file_id
         excel_file_path = os.path.join(app.config['UPLOAD_FOLDER'], data['file_id'])
         
+        # Set output folder to data folder in root directory
+        output_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        
+        # Create output directory if it doesn't exist
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+        
         # Process the Excel file
         result = process_excel_sheets(
             excel_file_path,
-            data['output_folder'],
+            output_folder,
             data['sheets']
         )
+        
+        # Add output folder path to the response
+        result["output_folder"] = output_folder
         
         return jsonify(result)
     
@@ -388,34 +402,41 @@ from DocumentGeneration import DocumentGenerator
 generator = DocumentGenerator(api_key="AIzaSyCBmnvIxJlKIafCAqL6JUJQZjNGqDCW6dk")
 
 
-@app.route('/generate-document', methods=['POST', 'GET'])
-def generate_document():
+@app.route('/generate-documents', methods=['POST'])
+def generate_documents():
     """
-    Generate a document from uploaded data
+    Generate a document from data in the data directory
     
     Expected JSON payload:
     {
-        "data_dir": "/path/to/data",
-        "output_file": "/path/to/output/file"
+        "data_dir": "optional/custom/path",  # Optional, defaults to app's data directory
+        "output_dir": "optional/output/path"  # Optional, defaults to 'output' in project directory
     }
+    
+    Returns:
+        JSON with list of generated files
     """
     try:
-        data = request.json
+        # Get the default data directory path
+        default_data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
         
-        # Validate required fields
-        if not all(key in data for key in ['data_dir', 'output_file']):
-            return jsonify({
-                "error": "Missing required fields. Required: data_dir, output_file"
-            }), 400
+        # Get the default output directory path
+        default_output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'output')
         
-        # Generate document
-        documentation = generator.generate(data['data_dir'], data['output_file'])
+        # Use custom directories if provided
+        data = request.json or {}
+        data_dir = data.get('data_dir', default_data_dir)
+        output_dir = data.get('output_dir', default_output_dir)
+        
+        # Generate documents using the DocumentGenerator
+        generated_files = generator.generate(data_dir, output_dir)
         
         return jsonify({
             "status": "success",
-            "message": "Document generated successfully",
-            "output_file": data['output_file'],
-            "length": len(documentation)
+            "message": "Documents generated successfully",
+            "generated_files": generated_files,
+            "output_dir": output_dir,
+            "count": len(generated_files)
         })
     
     except Exception as e:

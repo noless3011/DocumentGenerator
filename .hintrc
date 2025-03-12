@@ -1,0 +1,12 @@
+{
+  "extends": [
+    "development"
+  ],
+  "hints": {
+    "meta-viewport": "off",
+    "axe/language": "off",
+    "typescript-config/strict": "off",
+    "typescript-config/consistent-casing": "off",
+    "axe/forms": "off"
+  }
+}

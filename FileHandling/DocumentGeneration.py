@@ -64,6 +64,7 @@ class DocumentGenerator:
     def generate_document(self, image_data: Dict[str, str], csv_data: Dict[str, Any]) -> str:
         """Generate a document using Gemini API with both image and CSV data."""
         # Prepare the prompt with CSV data
+        return "hahahahaha"
         csv_description = json.dumps(csv_data, indent=2)
         
         # Prepare messages array with text and images
@@ -118,8 +119,33 @@ Please be detailed and thorough in your analysis."""
         
         print(f"Document saved to {output_path}")
         
-    def generate(self, data_dir: str, output_file: str = "output/program_documentation.md") -> str:
-        """Main function to generate the document."""
+    def save_images(self, image_data: Dict[str, str], output_dir: str) -> None:
+        """Save the input images to the output directory."""
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        for image_name, encoded_image in image_data.items():
+            try:
+                image_bytes = base64.b64decode(encoded_image)
+                image_output_path = output_path / image_name
+                with open(image_output_path, 'wb') as f:
+                    f.write(image_bytes)
+                print(f"Image saved to {image_output_path}")
+            except Exception as e:
+                print(f"Error saving image {image_name}: {str(e)}")
+    
+    def save_json(self, data: Dict[str, Any], output_file: str) -> None:
+        """Save data as JSON file."""
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        
+        print(f"JSON saved to {output_path}")
+        
+    def generate(self, data_dir: str, output_dir: str = "output") -> List[str]:
+        """Generate documents and diagrams, returning paths to all created files."""
         # Scan data directory
         files = self.scan_data_directory(data_dir)
         
@@ -129,12 +155,71 @@ Please be detailed and thorough in your analysis."""
         # Process image files
         image_data = self.prepare_images(files["images"])
         
-        # Generate document
+        # Generate main document
         document_content = self.generate_document(image_data, csv_data)
         
-        # Save document
-        self.save_document(document_content, output_file)
+        # Set up output directory
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
         
-        return document_content
+        # Save document
+        main_doc_path = output_dir / "program_documentation.md"
+        self.save_document(document_content, str(main_doc_path))
+        
+        # Save images to output folder
+        images_dir = output_dir / "images"
+        self.save_images(image_data, str(images_dir))
+        
+        # Generate various diagrams
+        class_diagram = self.generate_class_diagram(csv_data)
+        db_diagram = self.generate_database_diagram(csv_data)
+        usecase_diagram = self.generate_usecase_diagram(csv_data)
+        activity_diagram = self.generate_activity_diagram(csv_data)
+        
+        # Save diagrams
+        class_diagram_path = output_dir / "class_diagram.json"
+        db_diagram_path = output_dir / "database_diagram.json"
+        usecase_diagram_path = output_dir / "usecase_diagram.json"
+        activity_diagram_path = output_dir / "activity_diagram.json"
+        
+        self.save_json(class_diagram, str(class_diagram_path))
+        self.save_json(db_diagram, str(db_diagram_path))
+        self.save_json(usecase_diagram, str(usecase_diagram_path))
+        self.save_json(activity_diagram, str(activity_diagram_path))
+        
+        # Collect and return all file paths
+        generated_files = [
+            str(main_doc_path),
+            str(class_diagram_path),
+            str(db_diagram_path),
+            str(usecase_diagram_path),
+            str(activity_diagram_path)
+        ]
+        
+        # Add image files
+        for image_file in images_dir.glob("*.*"):
+            generated_files.append(str(image_file))
+        
+        return generated_files
+        
+    def generate_class_diagram(self, csv_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate class diagram representation in JSON format."""
+        # Implementation would go here
+        return {"type": "class_diagram", "entities": []}
+        
+    def generate_database_diagram(self, csv_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate database diagram representation in JSON format."""
+        # Implementation would go here
+        return {"type": "database_diagram", "tables": []}
+        
+    def generate_usecase_diagram(self, csv_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate use case diagram representation in JSON format."""
+        # Implementation would go here
+        return {"type": "usecase_diagram", "actors": [], "usecases": []}
+        
+    def generate_activity_diagram(self, csv_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate activity diagram representation in JSON format."""
+        # Implementation would go here
+        return {"type": "activity_diagram", "activities": [], "flows": []}
 
 

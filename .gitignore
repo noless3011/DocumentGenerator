@@ -310,3 +310,10 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Project specific directories
+data/**
+output/**
+DGUI/outputs/**
+FileHandling/output/**
+FileHandling/uploads/**
