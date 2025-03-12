@@ -57,6 +57,8 @@ The application leverages Gemini AI to analyze input data and generate human-rea
 
    ```
    cd ../FileHandling
+   python -m venv venv
+   source venv/bin/activate  # On Windows use: venv\Scripts\activate
    pip install -r requirements.txt
    ```
 
