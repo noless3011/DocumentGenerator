@@ -1,10 +1,16 @@
-import { dia, shapes } from '@joint/core';
-import { useEffect, useRef } from 'react';
-const ClassDiagramView = ({ graph }: { graph: dia.Graph }) => {
+import { dia, shapes } from '@joint/core'
+import React, { useEffect, useRef } from 'react';
+
+
+
+const DiagramView: React.FC = () => {
     const paperRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!paperRef.current) return;
+
+        // Initialize the graph
+        const graph = new dia.Graph();
 
         // Initialize the paper
         const paper = new dia.Paper({
@@ -43,7 +49,7 @@ const ClassDiagramView = ({ graph }: { graph: dia.Graph }) => {
         // Add attributes and methods
         const umlClass2 = new shapes.standard.Rectangle({
             position: { x: 400, y: 100 },
-            size: { width: 180, height: 180 },
+            size: { width: 200, height: 180 },
             attrs: {
                 body: {
                     fill: '#ffffff',
@@ -54,9 +60,9 @@ const ClassDiagramView = ({ graph }: { graph: dia.Graph }) => {
                     text: 'Employee\n\n- id: string\n- name: string\n\n+ getName(): string\n+ setName(name: string): void',
                     fontSize: 14,
                     refY: '10%',
-                    textVerticalAnchor: 'top',
+                    textVerticalAnchor: 'bottom',
                     textAnchor: 'middle',
-                    refX: '50%'
+                    refX: '0%'
                 }
             }
         });
@@ -92,10 +98,7 @@ const ClassDiagramView = ({ graph }: { graph: dia.Graph }) => {
 
         link.addTo(graph);
 
-        return () => {
-            paper.remove();
-        };
-    }, [graph]);
+    }, []);
 
     return (
         <div>
@@ -103,8 +106,10 @@ const ClassDiagramView = ({ graph }: { graph: dia.Graph }) => {
             <div
                 ref={paperRef}
                 id="class-diagram"
-                style={{ width: '100%', height: '600px', border: '1px solid #ccc' }}
+                className='w-full h-full border-solid border-2 border-gray-300'
             />
         </div>
     );
-}
+};
+
+export default DiagramView;
