@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import DocumentsHandling from './DocumentsHandling';
-import Results from './Results';
+import DocumentsHandling from './pages/DocumentsHandling';
+import Results from './pages/Results';
 
 interface VerticalTabProps {
     label: string;
