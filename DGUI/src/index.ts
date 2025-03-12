@@ -47,12 +47,27 @@ const createWindow = (): void => {
       return filePaths[0]
     }
   })
-  ipcMain.handle('file:read', async (_, filePath) => {
+  ipcMain.handle('file:readFileAsBase64', async (_, filePath) => {
     try {
       const data = await fs.readFile(filePath, 'utf-8');
       return Buffer.from(data).toString('base64');
     } catch (error) {
       return `Error reading file: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  });
+  ipcMain.handle('file:readFileAsText', async (_, filePath) => {
+    try {
+      return await fs.readFile
+    } catch (error) {
+      return `Error reading file: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  });
+  ipcMain.handle('file:saveFile', async (_, filePath, content) => {
+    try {
+      await fs.writeFile(filePath, content);
+    }
+    catch (error) {
+      return `Error saving file: ${error instanceof Error ? error.message : String(error)}`;
     }
   });
 };
