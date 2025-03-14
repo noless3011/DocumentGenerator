@@ -49,8 +49,8 @@ const createWindow = (): void => {
   })
   ipcMain.handle('file:readFileAsBase64', async (_, filePath) => {
     try {
-      const data = await fs.readFile(filePath, 'utf-8');
-      return Buffer.from(data).toString('base64');
+      const data = await fs.readFile(filePath, 'base64');
+      return data;
     } catch (error) {
       return `Error reading file: ${error instanceof Error ? error.message : String(error)}`;
     }

@@ -9,9 +9,8 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import pythoncom
 from werkzeug.utils import secure_filename
-
-
-
+from dotenv import load_dotenv
+from DocumentGeneration import DocumentGenerator    
 app = Flask(__name__)
 @app.after_request
 def add_csp_header(response):
@@ -397,9 +396,15 @@ def get_sheets(file_id):
         "file_id": file_id,
         "sheets": sheet_names
     })
-from DocumentGeneration import DocumentGenerator
-# Configurate for the document generator
-generator = DocumentGenerator(api_key="AIzaSyCBmnvIxJlKIafCAqL6JUJQZjNGqDCW6dk")
+load_dotenv()
+
+# Get API key from environment variables
+api_key = os.getenv('GEMINI_API_KEY')
+if not api_key:
+    raise ValueError("GOOGLE_API_KEY not found in environment variables. Please set it in .env file.")
+
+# Initialize the document generator with the API key
+generator = DocumentGenerator(api_key=api_key)
 
 
 @app.route('/generate-documents', methods=['POST'])
