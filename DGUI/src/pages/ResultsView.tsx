@@ -16,28 +16,46 @@ interface ResultsViewProps {
 
 const ResultsView: React.FC<ResultsViewProps> = ({ fileDirs }) => {
     const [tabs, setTabs] = useState<TabProps[]>([
-        { title: 'Test', dir: 'test.md', type: 'Markdown' }
+        { title: 'Test', dir: 'test.md', type: 'Markdown' } // Initial tab for testing, can be removed in production if not needed
     ]);
     const [selectedTabIndex, setSelectedTabIndex] = useState<number>(0);
-    fileDirs = ['test.md', 'test.png', 'test.json'];
+    // Using hardcoded values for testing - remove or comment this line in production
+    fileDirs = ['test.md', `outputs/images/KVA-XNK-Functions_v1.0_bfade153d889436283f76444a383281f_Menu 3.png`, 'test.json']
+
     useEffect(() => {
         const newTabs: TabProps[] = [];
         fileDirs.forEach((dir) => {
             if (dir.endsWith('.md')) {
-                newTabs.push({ title: dir, dir, type: 'Markdown' });
+                newTabs.push({ title: dir.split('/').pop() || dir, dir, type: 'Markdown' });
             } else if (dir.endsWith('.png') || dir.endsWith('.jpg')) {
-                newTabs.push({ title: dir, dir, type: 'Image' });
+                newTabs.push({ title: dir.split('/').pop() || dir, dir, type: 'Image' });
             } else if (dir.endsWith('.json')) {
-                newTabs.push({ title: dir, dir, type: 'Diagram' });
+                newTabs.push({ title: dir.split('/').pop() || dir, dir, type: 'Diagram' });
             }
         });
-        setTabs(newTabs);
-        if (newTabs.length > 0) {
-            setSelectedTabIndex(0);
-        } else {
-            setSelectedTabIndex(-1);
+
+        // Check if the new tabs are actually different from the current tabs before updating state
+        const areTabsDifferent = (newTabs: TabProps[], currentTabs: TabProps[]) => {
+            if (newTabs.length !== currentTabs.length) {
+                return true;
+            }
+            for (let i = 0; i < newTabs.length; i++) {
+                if (newTabs[i].dir !== currentTabs[i].dir || newTabs[i].type !== currentTabs[i].type || newTabs[i].title !== currentTabs[i].title) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (areTabsDifferent(newTabs, tabs)) {
+            setTabs(newTabs);
+            if (newTabs.length > 0) {
+                setSelectedTabIndex(0);
+            } else {
+                setSelectedTabIndex(-1);
+            }
         }
-    }, [fileDirs]);
+    }, [fileDirs, tabs]); // Added 'tabs' to dependency array for comparison
 
     return (
         <div className="flex flex-col h-full">

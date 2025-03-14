@@ -133,7 +133,3 @@ MIT
 - Flask for the lightweight API backend
 
 ---
-
-For any questions or issues, please open an issue on the GitHub repository.
-
-Similar code found with 2 license types

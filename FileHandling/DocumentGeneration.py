@@ -64,7 +64,6 @@ class DocumentGenerator:
     def generate_document(self, image_data: Dict[str, str], csv_data: Dict[str, Any]) -> str:
         """Generate a document using Gemini API with both image and CSV data."""
         # Prepare the prompt with CSV data
-        return "hahahahaha"
         csv_description = json.dumps(csv_data, indent=2)
         
         # Prepare messages array with text and images
