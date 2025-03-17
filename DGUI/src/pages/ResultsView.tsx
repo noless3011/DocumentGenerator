@@ -20,7 +20,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ fileDirs }) => {
     ]);
     const [selectedTabIndex, setSelectedTabIndex] = useState<number>(0);
     // Using hardcoded values for testing - remove or comment this line in production
-    // fileDirs = ['outputs/program_documentation.md', `outputs/images/Connect API.png`, 'outputs/activity_diagram.json', 'outputs/class_diagram.json', 'outputs/database_diagram.json', 'outputs/usecase_diagram.json', 'outputs/activity_diagram.json', 'outputs/class_diagram.json', 'outputs/database_diagram.json', 'outputs/usecase_diagram.json']
+    fileDirs = ['outputs/program_documentation.md', `outputs/images/Connect API.png`, 'outputs/activity_diagram.json', 'outputs/class_diagram.json', 'outputs/database_diagram.json', 'outputs/usecase_diagram.json', 'outputs/activity_diagram.json', 'outputs/class_diagram.json', 'outputs/database_diagram.json', 'outputs/usecase_diagram.json']
 
     useEffect(() => {
         const newTabs: TabProps[] = [];

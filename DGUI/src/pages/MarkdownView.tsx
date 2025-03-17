@@ -27,6 +27,25 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({ fileDir, className }) => {
         <div className={`h-full markdown-view bg-white rounded-lg shadow p-6 ${className}`}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
+                components={{
+                    code({ node, inline, className, children, ...props }: any) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        return !inline && match ? (
+                            <SyntaxHighlighter
+                                style={vscDarkPlus as Record<string, React.CSSProperties>}
+                                language={match[1]}
+                                PreTag="div"
+                                {...props}
+                            >
+                                {String(children).replace(/\n$/, '')}
+                            </SyntaxHighlighter>
+                        ) : (
+                            <code className={className} {...props}>
+                                {children}
+                            </code>
+                        );
+                    }
+                }}
             >
                 {markdownContent}
             </ReactMarkdown>
