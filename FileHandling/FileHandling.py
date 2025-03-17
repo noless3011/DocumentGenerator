@@ -301,7 +301,7 @@ def api_process_excel():
         excel_file_path = os.path.join(app.config['UPLOAD_FOLDER'], data['file_id'])
         
         # Set output folder to data folder in root directory
-        output_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        output_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'FileHandling', 'output')
         
         # Create output directory if it doesn't exist
         if not os.path.exists(output_folder):
@@ -403,8 +403,6 @@ api_key = os.getenv('GEMINI_API_KEY')
 if not api_key:
     raise ValueError("GOOGLE_API_KEY not found in environment variables. Please set it in .env file.")
 
-# Initialize the document generator with the API key
-generator = DocumentGenerator(api_key=api_key)
 
 
 @app.route('/generate-documents', methods=['POST'])
@@ -421,6 +419,8 @@ def generate_documents():
     Returns:
         JSON with list of generated files
     """
+    # Initialize the document generator with the API key
+    generator = DocumentGenerator(api_key=api_key)
     try:
         # Get the default data directory path
         default_data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
