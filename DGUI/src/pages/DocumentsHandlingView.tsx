@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { dialog, ipcMain } from 'electron'
 
 interface SheetOption {
     name: string;
@@ -33,6 +32,11 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
         if (!file) return;
 
         setFileName(file.name);
+        setSheets([]); // Clear previous sheets
+        setPreviewData([]); // Clear preview data
+        setPreviewHeaders([]); // Clear preview headers
+        setProcessingResults(null); // Clear processing results
+        setFileId(''); // Clear previous fileId
 
         try {
             // Create form data for file upload
@@ -46,11 +50,12 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                 mode: 'cors'
             });
 
-            const uploadResult = await uploadResponse.json();
-
             if (!uploadResponse.ok) {
-                throw new Error(uploadResult.error || 'Failed to upload file');
+                const errorResult = await uploadResponse.json();
+                throw new Error(errorResult.error || `Failed to upload file: ${uploadResponse.status}`);
             }
+
+            const uploadResult = await uploadResponse.json();
 
             // Store the file ID for later use
             setFileId(uploadResult.file_id);
@@ -60,17 +65,19 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                 method: 'GET',
                 mode: 'cors'
             });
-            const sheetsResult = await sheetsResponse.json();
 
             if (!sheetsResponse.ok) {
-                throw new Error(sheetsResult.error || 'Failed to get sheet names');
+                const errorResult = await sheetsResponse.json();
+                throw new Error(sheetsResponse.statusText || `Failed to get sheet names: ${sheetsResponse.status}`);
             }
+
+            const sheetsResult = await sheetsResponse.json();
 
             // Map sheet names to sheet options
             const sheetOptions: SheetOption[] = sheetsResult.sheets.map((name: string) => ({
                 name,
                 selected: true,
-                options: ['UI', 'Table', 'Diagram', 'Others'],
+                options: ['UI', 'Table'], // Removed Diagram and Others as per backend options
                 selectedOption: 'UI'
             }));
 
@@ -78,33 +85,81 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
 
             // Preview the first sheet if available
             if (sheetOptions.length > 0) {
-                // Handle preview logic here
                 setCurrentPreviewSheet(sheetOptions[0].name);
+                // No need to handle preview logic immediately here, let user click preview button
             }
+            alert('File uploaded and sheets loaded successfully!');
+
+
         } catch (error) {
             console.error('Error handling file:', error);
-            alert(error instanceof Error ? error.message : 'An unknown error occurred');
+            alert(error instanceof Error ? error.message : 'An unknown error occurred during file upload.');
+            setFileName(''); // Reset file name on error
+            setSheets([]); // Clear sheets on error
+            setFileId(''); // Clear fileId on error
         }
     };
 
-    const handlePreviewSheet = (sheetName: string) => {
-        const worksheet = workbookRef.current?.Sheets[sheetName];
+    const handlePreviewSheet = async (sheetName: string) => {
+        try {
+            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets/${fileId}`, {
+                method: 'GET',
+                mode: 'cors'
+            });
 
-        if (worksheet) {
-            const jsonData = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1 });
-
-            if (jsonData.length > 0) {
-                // First row as headers
-                const headers = (jsonData[0] as any[]).map(h => h?.toString() || '');
-
-                const rows = jsonData.slice(1, 21);
-
-                setPreviewHeaders(headers);
-                setPreviewData(rows);
-                setCurrentPreviewSheet(sheetName);
+            if (!sheetsResponse.ok) {
+                const errorResult = await sheetsResponse.json();
+                throw new Error(errorResult.error || `Failed to get sheet data for preview: ${sheetsResponse.status}`);
             }
+            const sheetsResult = await sheetsResponse.json();
+
+            // Simulate reading sheet data from backend (replace with actual API if needed for preview data)
+            // For now, re-parse the file on frontend for preview (efficient for small previews)
+            const fileInput = fileInputRef.current?.files?.[0];
+            if (!fileInput) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const binaryString = e.target?.result;
+                const workbook = XLSX.read(binaryString, { type: 'binary' });
+                workbookRef.current = workbook; // Store workbook for later use
+
+                const worksheet = workbook.Sheets[sheetName];
+
+                if (worksheet) {
+                    const jsonData = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1, defval: '' });
+
+                    if (jsonData.length > 0) {
+                        // First row as headers
+                        const headers = (jsonData[0] as any[]).map(h => h?.toString() || '');
+                        const rows = jsonData.slice(1, 21); // Preview up to 20 rows
+
+                        setPreviewHeaders(headers);
+                        setPreviewData(rows);
+                        setCurrentPreviewSheet(sheetName);
+                    } else {
+                        setPreviewHeaders([]);
+                        setPreviewData([[]]); // Show empty table if no data
+                        setCurrentPreviewSheet(sheetName);
+                        alert(`Sheet "${sheetName}" is empty.`);
+                    }
+                } else {
+                    alert(`Sheet "${sheetName}" not found in the Excel file.`);
+                }
+            };
+            reader.onerror = (error) => {
+                console.error('Error reading file for preview:', error);
+                alert('Failed to read file for preview. Check console for details.');
+            };
+            reader.readAsBinaryString(fileInput);
+
+
+        } catch (error) {
+            console.error('Error previewing sheet:', error);
+            alert(error instanceof Error ? error.message : 'An error occurred while trying to preview the sheet.');
         }
     };
+
 
     const handleOutputFolderSelect = () => {
         window.myAPI.selectFolder().then((folderPath) => {
@@ -125,37 +180,32 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
     };
 
     const handleProcessSheets = async () => {
-        // Check if file is selected
-        if (!fileName) {
-            alert('Please select an Excel file');
+        if (!fileId) {
+            alert('Please upload an Excel file first.');
             return;
         }
 
-        // Get only selected sheets with their options
         const selectedSheetTypes = sheets.reduce((acc, sheet) => {
             if (sheet.selected) {
-                // Map the selectedOption to the backend's expected format
                 acc[sheet.name] = sheet.selectedOption.toLowerCase();
             }
             return acc;
         }, {} as Record<string, string>);
 
-        // No sheets selected
         if (Object.keys(selectedSheetTypes).length === 0) {
-            alert('Please select at least one sheet to process');
+            alert('Please select at least one sheet to process.');
             return;
         }
 
-        // Prepare the request payload according to the new API format
         const payload = {
             file_id: fileId,
             sheets: selectedSheetTypes
         };
 
         try {
-            setProcessing(true); // Add a processing state to show loading
+            setProcessing(true);
+            setProcessingResults(null); // Clear previous results
 
-            // Make the API call
             const response = await fetch('http://localhost:5000/process-excel', {
                 method: 'POST',
                 headers: {
@@ -165,18 +215,19 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                 mode: 'cors'
             });
 
-            const result = await response.json();
-
-            if (response.ok) {
-                setProcessingResults(result);
-                setFileDirs(result.fileDirs);
-                alert('Processing completed successfully!');
-            } else {
-                alert(`Error: ${result.error || 'Unknown error occurred'}`);
+            if (!response.ok) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || `Sheet processing failed: ${response.status}`);
             }
+
+            const result = await response.json();
+            setProcessingResults(result);
+            alert('Sheets processed successfully!');
+
+
         } catch (error) {
             console.error('Error processing sheets:', error);
-            alert('Failed to process sheets. Check console for details.');
+            alert(error instanceof Error ? error.message : 'Failed to process sheets.');
         } finally {
             setProcessing(false);
         }
@@ -191,25 +242,24 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    // Only pass data_dir if outputFolder is provided
                     ...(outputFolder && { output_dir: outputFolder })
                 }),
                 mode: 'cors'
             });
 
+            if (!response.ok) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || `Document generation failed: ${response.status}`);
+            }
+
+
             const result = await response.json();
 
-            if (response.ok) {
-                // Update fileDirs with generated_files from the API response
-                console.log(result.generated_files);
-                if (result.generated_files && Array.isArray(result.generated_files)) {
-                    setFileDirs(result.generated_files);
-                }
-                alert(`Documents generated successfully! ${result.count} file(s) created in ${result.output_dir}`);
-                switchTab(1); // Switch to the Results tab
-            } else {
-                alert(`Error: ${result.error || 'Unknown error occurred'}`);
+            if (result.generated_files && Array.isArray(result.generated_files)) {
+                setFileDirs(result.generated_files);
             }
+            alert(`Documents generated successfully! ${result.count} file(s) created in ${result.output_dir}`);
+            switchTab(1); // Switch to the Results tab
         } catch (error) {
             console.error('Error generating documents:', error);
             alert('Failed to generate documents. Check console for details.');
@@ -234,7 +284,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                             ref={fileInputRef}
                             onChange={handleFileUpload}
                             accept=".xlsx, .xls"
-                            className="file-input hidden" // Hidden by default, triggered by button
+                            className="file-input hidden"
                         />
                         <button
                             onClick={() => fileInputRef.current?.click()}
@@ -370,7 +420,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                     <div className="empty-preview flex justify-center items-center h-full">
                         <p className="empty-message text-gray-500 italic">
                             {fileName
-                                ? 'Processing file or no data available...'
+                                ? 'Select a sheet to preview...'
                                 : 'Upload an Excel file to see preview'}
                         </p>
                     </div>
@@ -383,7 +433,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                             {Object.entries(processingResults).map(([sheetName, result]) => (
                                 <li key={sheetName} className="mb-1">
                                     <strong className="font-medium">{sheetName}:</strong> <span className="text-sm">{(result as any).status === 'success'
-                                        ? `Processed as ${(result as any).type}, output at: ${(result as any).output_path}`
+                                        ? `Processed as ${(result as any).type}, output in: ${(result as any).output_folder}` // Changed to output_folder as per API
                                         : `Error: ${(result as any).message}`}</span>
                                 </li>
                             ))}
@@ -394,4 +444,5 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
         </div>
     );
 };
+
 export default DocumentsHandling;

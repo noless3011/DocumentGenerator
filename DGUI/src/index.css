@@ -7,10 +7,12 @@ body {
     Arial, sans-serif;
   margin: auto;
   min-width: 50vw;
+  flex-grow: 1;
   min-height: 50vh;
   width: 100vw;
   height: 100vh;
   max-width: 100vw;
   max-height: 100vh;
   padding: 2rem;
+  
 }

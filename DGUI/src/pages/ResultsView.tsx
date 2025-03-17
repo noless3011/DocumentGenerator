@@ -20,10 +20,11 @@ const ResultsView: React.FC<ResultsViewProps> = ({ fileDirs }) => {
     ]);
     const [selectedTabIndex, setSelectedTabIndex] = useState<number>(0);
     // Using hardcoded values for testing - remove or comment this line in production
-    fileDirs = ['test.md', `outputs/images/KVA-XNK-Functions_v1.0_bfade153d889436283f76444a383281f_Menu 3.png`, 'test.json']
+    // fileDirs = ['outputs/program_documentation.md', `outputs/images/Connect API.png`, 'outputs/activity_diagram.json', 'outputs/class_diagram.json', 'outputs/database_diagram.json', 'outputs/usecase_diagram.json', 'outputs/activity_diagram.json', 'outputs/class_diagram.json', 'outputs/database_diagram.json', 'outputs/usecase_diagram.json']
 
     useEffect(() => {
         const newTabs: TabProps[] = [];
+        console.log(fileDirs);
         fileDirs.forEach((dir) => {
             if (dir.endsWith('.md')) {
                 newTabs.push({ title: dir.split('/').pop() || dir, dir, type: 'Markdown' });
@@ -58,7 +59,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ fileDirs }) => {
     }, [fileDirs, tabs]); // Added 'tabs' to dependency array for comparison
 
     return (
-        <div className="flex flex-col h-full w-full">
+        <div className="flex flex-col h-full w-full max-w-full">
             <div className="flex flex-col h-full overflow-hidden">
                 <div className="flex border-b border-gray-300 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 whitespace-nowrap">
                     {tabs.map((tab, index) => (

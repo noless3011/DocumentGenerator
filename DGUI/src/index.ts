@@ -57,7 +57,8 @@ const createWindow = (): void => {
   });
   ipcMain.handle('file:readFileAsText', async (_, filePath) => {
     try {
-      return await fs.readFile
+      const data = await fs.readFile(filePath, 'utf-8');
+      return data;
     } catch (error) {
       return `Error reading file: ${error instanceof Error ? error.message : String(error)}`;
     }

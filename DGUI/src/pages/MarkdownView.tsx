@@ -14,8 +14,14 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({ fileDir, className }) => {
     const [markdownContent, setMarkdownContent] = useState<string>(content);
 
     useEffect(() => {
-        setMarkdownContent(content);
-    }, [content]);
+        // Load markdown content from file
+        const currentFileDir = fileDir;
+        window.myAPI.readFileAsText(currentFileDir)
+            .then((data: string) => {
+                setMarkdownContent(data);
+            })
+
+    }, [fileDir]);
 
     return (
         <div className={`h-full markdown-view bg-white rounded-lg shadow p-6 ${className}`}>

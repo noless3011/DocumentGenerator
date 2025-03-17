@@ -51,10 +51,10 @@ const AppContainer: React.FC = () => {
     const displayTabs = tabs.length > 0 ? tabs : [];
 
     return (
-        <div className="flex h-full">
+        <div className="flex flex-row h-full flex-grow">
             {/* Vertical Sidebar */}
             <div className="w-64 bg-white shadow-lg">
-                <div className="flex flex-col h-full">
+                <div className="flex flex-col h-full ">
                     {displayTabs.map((tab, index) => (
                         <button
                             key={index}
@@ -72,7 +72,7 @@ const AppContainer: React.FC = () => {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 p-6">
+            <div className="flex-1 p-6 flex-grow overflow-x-scroll">
                 {displayTabs[activeTab].content}
             </div>
         </div>
