@@ -5,6 +5,8 @@ import os
 import pandas as pd
 import json
 from typing import List, Dict, Any
+from agents.TextDocumentAgent import TextDocumentAgent
+
 
 class DocumentGenerator:
     def __init__(self, api_key=None, model="gemini/gemini-2.0-flash"):
@@ -16,6 +18,7 @@ class DocumentGenerator:
             
         self.model = model
         litellm.set_verbose = False
+        self.text_generator = TextDocumentAgent(model)
         
     def scan_data_directory(self, data_dir: str) -> Dict[str, List[Path]]:
         """Scan the data directory for images and CSV files."""
@@ -61,52 +64,6 @@ class DocumentGenerator:
                 
         return image_data
     
-    def generate_document(self, image_data: Dict[str, str], csv_data: Dict[str, Any]) -> str:
-        """Generate a document using Gemini API with both image and CSV data."""
-        # Prepare the prompt with CSV data
-        csv_description = json.dumps(csv_data, indent=2)
-        
-        # Prepare messages array with text and images
-        messages = [
-            {
-                "role": "user", 
-                "content": [
-                    {
-                        "type": "text", 
-                        "text": f"""Please create a detailed document that describes the program based on the following UI screenshots and feature data.
-                        
-The CSV data contains information about the program features:
-{csv_description}
-
-Based on both the UI screenshots and the feature data, please:
-1. Identify the purpose of the application
-2. Describe the main features and functionality
-3. Explain the user interface components
-4. Provide a concise summary of how the application works
-5. Format your response as a professional document with clear sections
-
-Please be detailed and thorough in your analysis."""
-                    }
-                ]
-            }
-        ]
-        
-        # Add image content to the first message
-        for image_name, encoded_image in image_data.items():
-            messages[0]["content"].append({
-                "type": "image_url",
-                "image_url": f"data:image/png;base64,{encoded_image}"
-            })
-        
-        # Make API call to Gemini
-        try:
-            response = litellm.completion(
-                model=self.model,
-                messages=messages
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            return f"Error generating document: {str(e)}"
     
     def save_document(self, content: str, output_file: str) -> None:
         """Save the generated document to a file."""
@@ -155,7 +112,7 @@ Please be detailed and thorough in your analysis."""
         image_data = self.prepare_images(files["images"])
         
         # Generate main document
-        document_content = self.generate_document(image_data, csv_data)
+        document_content = self.text_generator.generate_document(image_data, csv_data)
         
         # Set up output directory
         output_dir = Path(output_dir)
