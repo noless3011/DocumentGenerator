@@ -102,13 +102,14 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
         try {
             // Create form data for file upload
             const formData = new FormData();
-            formData.append('file', file);
-
+            formData.append('file', file); 
+    
             // Upload file to backend
             const uploadResponse = await fetch('http://localhost:5000/upload-excel', {
                 method: 'POST',
                 body: formData,
-                mode: 'cors'
+                mode: 'cors',
+                credentials: 'include', 
             });
 
             if (!uploadResponse.ok) {

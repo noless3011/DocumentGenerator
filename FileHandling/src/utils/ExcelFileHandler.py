@@ -1,4 +1,3 @@
-# ExcelFileHandler.py
 import os
 import csv
 import io
@@ -43,18 +42,17 @@ class ExcelFileHandler:
         """Processes a worksheet as a text table and returns CSV data."""
         used_range = worksheet.UsedRange
         output = io.StringIO()
-        csv_writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)  # Use QUOTE_MINIMAL
+        csv_writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)  
         for row in range(1, used_range.Rows.Count + 1):
             row_data = []
             for col in range(1, used_range.Columns.Count + 1):
                 cell_value = used_range.Cells(row, col).Value
-                # Handle None and ensure proper string encoding
                 if cell_value is None:
                     row_data.append("")
                 elif isinstance(cell_value, str):
-                    row_data.append(cell_value.encode('utf-16', errors='ignore').decode('utf-16'))
+                    row_data.append(cell_value.encode('utf-8', errors='ignore').decode('utf-8'))
                 else:
-                    row_data.append(str(cell_value)) # Convert other types (numbers, dates) to string
+                    row_data.append(str(cell_value)) 
             csv_writer.writerow(row_data)
         return output.getvalue()
 
@@ -107,7 +105,7 @@ class ExcelFileHandler:
                   if sheet_type.lower() == 'table':
                       csv_data = self._process_text_table(worksheet)
                       output_path = os.path.join(output_folder, f"{sheet_name}.csv")
-                      with open(output_path, 'w', newline='', encoding='utf-16') as csv_file:
+                      with open(output_path, 'w', newline='', encoding='utf-8') as csv_file: # Changed to utf-8
                           csv_file.write(csv_data)
                       result[sheet_name] = {
                           "status": "success",

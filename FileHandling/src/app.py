@@ -147,25 +147,37 @@ def health_check():
 @app.route('/upload-excel', methods=['POST'])
 def upload_excel():
     """Upload an Excel file to the server."""
-    """
-    Upload an Excel file. Generates and returns a UUID for session management.
-    """
-    if current_session is None:
+    session_data = session.get('work_session_data') # Get session data from Flask session
+    if session_data is None:
         return jsonify({"error": "No active session. Please start a session first."}), 400
+    work_session = WorkSession.from_dict(session_data) # Recreate WorkSession object
+
+    print("UPLOAD-EXCEL: Request Files:", request.files) # ADD LOGGING
+
     if 'file' not in request.files:
+        print("UPLOAD-EXCEL: Error - 'file' part missing in request") # ADD LOGGING
         return jsonify({"error": "No file part in the request"}), 400
 
     file = request.files['file']
+    print("UPLOAD-EXCEL: File object:", file) # ADD LOGGING
+
     if file.filename == '':
+        print("UPLOAD-EXCEL: Error - No file selected (empty filename)") # ADD LOGGING
         return jsonify({"error": "No file selected"}), 400
 
-    if file and allowed_file(file.filename):
-        session_uuid = current_session.get_session_id()
+    if file and not allowed_file(file.filename): # Combined condition for clarity
+        print(f"UPLOAD-EXCEL: Error - Invalid file type: {file.filename}") # ADD LOGGING
+        return jsonify({"error": f"Invalid file type. Allowed types are: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
+
+    if file and allowed_file(file.filename): # Redundant check, but keep for now, add log for success
+        session_uuid = work_session.get_session_id() # Get session ID from work_session
         session_folder = os.path.join(app.config['UPLOAD_FOLDER'], session_uuid)
         os.makedirs(session_folder, exist_ok=True)
         original_filename = secure_filename(file.filename)
         file_path = os.path.join(session_folder, original_filename)
         file.save(file_path)
+
+        print(f"UPLOAD-EXCEL: Success - File saved to: {file_path}") # ADD LOGGING
 
         return jsonify({
             "status": "success",
@@ -174,9 +186,11 @@ def upload_excel():
             "original_filename": original_filename,
             "file_path": file_path
         })
-    else:
-        return jsonify({"error": f"Invalid file type. Allowed types are: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
-
+    else: # This 'else' is likely unreachable now with combined condition, but keep for safety, add log
+        print("UPLOAD-EXCEL: Error - Unhandled case or file is None (should not reach here if 'file' in request)") # ADD LOGGING
+        return jsonify({"error": "Unknown file upload error"}), 400
+    
+    
 @app.route('/process-excel', methods=['POST'])
 def api_process_excel():
     """Process Excel file sheets and save as CSV or images."""
