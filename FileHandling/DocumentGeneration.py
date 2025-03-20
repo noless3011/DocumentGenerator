@@ -202,9 +202,63 @@ Please be detailed and thorough in your analysis."""
         return generated_files
         
     def generate_class_diagram(self, csv_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate class diagram representation in JSON format."""
-        # Implementation would go here
-        return {"type": "class_diagram", "entities": []}
+        """Generate class diagram representation in JSON format with improved structure."""
+
+        # --- Placeholder Logic - Replace with your actual diagram generation logic ---
+        # This is just an example to demonstrate the output structure.
+        # You need to extract class, attribute, method, and relationship information
+        # from your `csv_data` or other data source and structure it as shown below.
+
+        entities_data: List[Dict[str, Any]] = []
+        associations_data: List[Dict[str, Any]] = []
+
+        # Example hardcoded data for demonstration - REPLACE THIS with your logic!
+        entities_data = [
+            {
+                "id": "class1",
+                "name": "Person",
+                "properties": [
+                    {"visibility": "private", "name": "name", "type": "string"},
+                    {"visibility": "public", "name": "age", "type": "number"}
+                ],
+                "methods": [
+                    {"visibility": "public", "name": "getName", "returnType": "string", "parameters": []}
+                ]
+            },
+            {
+                "id": "class2",
+                "name": "Employee",
+                "properties": [
+                    {"visibility": "private", "name": "employeeId", "type": "string"}
+                ],
+                "methods": [
+                    {"visibility": "public", "name": "getEmployeeId", "returnType": "string", "parameters": []}
+                ]
+            }
+        ]
+
+        associations_data = [
+            {
+                "from": "class2",  # Employee
+                "to": "class1",    # Person
+                "type": "Inheritance"
+            },
+            {
+                "from": "class1",  # Person
+                "to": "class2",    # Employee
+                "type": "Association" # Just for example
+            }
+        ]
+        # --- End of Placeholder Logic ---
+
+
+        diagram_json = {
+            "type": "class_diagram", # Optional, but good to indicate diagram type
+            "entities": entities_data,
+            "associations": associations_data
+        }
+
+        return diagram_json
         
     def generate_database_diagram(self, csv_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate database diagram representation in JSON format."""
