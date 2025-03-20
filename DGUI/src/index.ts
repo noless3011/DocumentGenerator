@@ -14,6 +14,7 @@ if (require('electron-squirrel-startup')) {
 const createWindow = (): void => {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
+    
     height: 600,
     width: 800,
     webPreferences: {
@@ -22,6 +23,8 @@ const createWindow = (): void => {
   });
   // and load the index.html of the app.
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+ 
+
 
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
@@ -94,6 +97,9 @@ app.on('activate', () => {
     createWindow();
   }
 });
+
+
+
 
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
