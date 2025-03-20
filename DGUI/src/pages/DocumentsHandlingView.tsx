@@ -39,13 +39,14 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                 },
                 body: JSON.stringify({ session_name: sessionName || 'Untitled Session' }),
                 mode: 'cors',
+                credentials: 'include', // ADD THIS LINE
             });
-
+    
             if (!response.ok) {
                 const errorResult = await response.json();
                 throw new Error(errorResult.error || `Failed to start session: ${response.status}`);
             }
-
+    
             const result = await response.json();
             setSessionId(result.session_id);
             alert(`Session "${result.session_name}" started successfully! Session ID: ${result.session_id}`);
@@ -64,13 +65,14 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
             const response = await fetch('http://localhost:5000/end-session', {
                 method: 'POST',
                 mode: 'cors',
+                credentials: 'include', 
             });
-
+    
             if (!response.ok) {
                 const errorResult = await response.json();
                 throw new Error(errorResult.error || `Failed to end session: ${response.status}`);
             }
-
+    
             setSessionId(null);
             setSessionName('');
             alert('Session ended successfully.');
