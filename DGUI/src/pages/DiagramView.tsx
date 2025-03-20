@@ -1,5 +1,25 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import ClassDiagram from '../models/ClassDiagram'; // Fixed import path
+import ClassDiagram from '../models/ClassDiagram'; 
+
+
+interface ClassDiagramResponse {
+    classes: ClassDataFromBackend[];
+    relationships: RelationshipDataFromBackend[];
+    error?: string; // Optional error property
+}
+
+interface ClassDataFromBackend {
+    name: string;
+    loc?: string; // Assuming 'loc' is optional, adjust if needed
+    // Add other properties you expect in your class data from backend, e.g., properties, methods
+}
+
+interface RelationshipDataFromBackend {
+    from: string;
+    to: string;
+    relationship: string;
+    // Add other relationship properties if needed
+}
 
 interface DiagramViewProps {
     fileDir: string;
@@ -39,17 +59,49 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
         if (container) {
             const diagram = new ClassDiagram(container);
             setClassDiagramInstance(diagram);
-            // Initialize diagram with some example data if needed, or fetch from backend here
+            //Fetch from backend here
+            // Fetch initial class diagram data from backend API
+            fetch('/api/class-diagram', { // <-- ENSURE URL IS CORRECT:  '/api/class-diagram' (or '/api/generate-class-diagram-data' if you kept that)
+                method: 'POST', // <-- ENSURE METHOD IS POST (or GET if you changed backend)
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                // body: JSON.stringify({ data_dir: 'your_data_directory' }), // If needed
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+                return response.json() as Promise<ClassDiagramResponse>; 
+            })
+            .then(diagramData => {
+                if (diagramData && diagramData.classes && diagramData.relationships) {
+                    // Process classes and relationships from JSON data
+                    diagramData.classes.forEach((classData: ClassDataFromBackend) => { // Type classData
+                        diagram.addClass(classData.name, classData.loc ? parseInt(classData.loc.split(' ')[0]) : 200, classData.loc ? parseInt(classData.loc.split(' ')[1]) : 200);
+                    });
+                    diagramData.relationships.forEach((relationshipData: RelationshipDataFromBackend) => { // Type relationshipData
+                        diagram.addLink(relationshipData.from, relationshipData.to, relationshipData.relationship);
+                    });
+                } else if (diagramData && diagramData.error) { // Handle error from backend JSON
+                    alert(`Error loading diagram data: ${diagramData.error}`);
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching initial class diagram data:", error);
+                alert("Failed to load initial class diagram data from backend.");
+            });
         }
         return () => { };
     }, []);
 
-    // Function to update class dropdown options
+    // Function update class dropdown options
     const updateClassDropdowns = useCallback(() => {
         if (!classDiagramInstance) return [];
         const nodeDataArray = classDiagramInstance.getNodeDataArray();
         const options = nodeDataArray.map((nodeData: NodeData) => ({ key: nodeData.key, name: nodeData.name }));
-        console.log("Class Dropdown Options:", options); // ADD THIS LINE
+        // console.log("Class Dropdown Options:", options);
         return options;
     }, [classDiagramInstance]);
 

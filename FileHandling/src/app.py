@@ -229,6 +229,27 @@ def generate_documents():
     if current_session is None:
         return jsonify({"error": "No active session. Please start a session first."}), 400
     
+@app.route('/api/class-diagram', methods=['POST']) # Changed route name to /api/class-diagram and using POST
+def get_class_diagram():
+    """API endpoint to generate class diagram data from Gemini."""
+    if current_session is None:
+        return jsonify({"error": "No active session. Please start a session first."}), 400
+
+    try:
+        data_dir = os.path.join(app.config['OUTPUT_FOLDER_BASE'], current_session.get_session_id()) # Use session output folder
+        files = generator.scan_data_directory(data_dir)
+        csv_data = generator.read_csv_data(files["csvs"])
+
+        if not csv_data: # Check if csv_data is empty
+            return jsonify({"error": "No CSV data found to generate class diagram."}), 400
+
+        diagram_data = generator.generate_class_diagram(csv_data) # Call the updated generate_class_diagram
+
+        return jsonify(diagram_data), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 
 
 if __name__ == '__main__':
