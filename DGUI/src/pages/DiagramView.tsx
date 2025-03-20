@@ -103,12 +103,12 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
     }, []);
 
     return (
-        <div>
+        <div className='w-full h-full flex flex-col'>
             <h1>Class Diagram</h1>
             <div
                 ref={paperRef}
                 id="class-diagram"
-                className='w-full h-full border-solid border-2 border-gray-300'
+                className='w-full h-full flex-1 border-solid border-2 border-gray-300'
             />
         </div>
     );
