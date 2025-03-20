@@ -61,6 +61,7 @@
     "electron-squirrel-startup": "^1.0.1",
     "fs": "^0.0.1-security",
     "fs.promises": "^0.1.2",
+    "gojs": "^3.0.20",
     "lucide-react": "^0.479.0",
     "postcss": "^8.5.3",
     "postcss-loader": "^8.1.1",
