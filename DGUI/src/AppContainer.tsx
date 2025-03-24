@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import DocumentsHandling from './pages/DocumentsHandlingView';
 import ResultsView from './pages/ResultsView';
-
+import ProjectManagingMenu from './components/DocumentsHandling/ProjectManagingMenu';
+import { Project } from './components/DocumentsHandling/ProjectManagingMenu';
 interface VerticalTabProps {
     label: string;
     icon?: React.ReactNode;
@@ -14,9 +15,13 @@ const VerticalTab: React.FC<VerticalTabProps> = ({ children }) => {
 
 
 const AppContainer: React.FC = () => {
+    const [activateSession, setActivateSession] = useState(false);
     const [activeTab, setActiveTab] = useState(0);
     const switchTab = (index: number) => setActiveTab(index);
-    const [fileDirs, setFileDirs] = useState<string[]>([]);
+    const [project, setProject] = useState<Project>();
+    const onProjectLoaded = (project: Project) => {
+        setProject(project);
+    }
     const tabs = [
         {
             label: "Documents",
@@ -25,7 +30,7 @@ const AppContainer: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
             ),
-            content: <DocumentsHandling switchTab={switchTab} setFileDirs={setFileDirs} />
+            content: <DocumentsHandling switchTab={switchTab} project={project} />
         },
         {
             label: "Results",
@@ -34,7 +39,7 @@ const AppContainer: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
             ),
-            content: <ResultsView fileDirs={fileDirs} />
+            content: <ResultsView project={project} />
         },
         {
             label: "Settings",
@@ -73,7 +78,11 @@ const AppContainer: React.FC = () => {
 
             {/* Content Area */}
             <div className="flex-1 p-6 flex-grow overflow-x-scroll">
-                {displayTabs[activeTab].content}
+                <div className='flex flex-col'>
+                    <ProjectManagingMenu onProjectLoaded={onProjectLoaded}></ProjectManagingMenu>
+
+                    {displayTabs[activeTab].content}
+                </div>
             </div>
         </div>
     );

@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 import {dialog, ipcMain} from 'electron'
+import { Project } from './components/DocumentsHandling/ProjectManagingMenu';
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();
@@ -72,6 +73,23 @@ const createWindow = (): void => {
     }
     catch (error) {
       return `Error saving file: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  });
+  ipcMain.handle('view:processedFileFromProject', async (_, project:Project) => {
+    try {
+        // Read the project directory and return a dict with 3 types of files: markdown, image, json 
+        const baseDir = project.base_dir;
+        const processedDir = `${baseDir}/processed`;
+        const files = await fs.readdir(processedDir);
+        const result = {
+          markdown: files.filter(file => file.endsWith('.md')),
+          image: files.filter(file => file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg')),
+          json: files.filter(file => file.endsWith('.json'))
+        }
+        return result
+
+    } catch (error) {
+      return `Error reading project files: ${error instanceof Error ? error.message : String(error)}`;
     }
   });
 };

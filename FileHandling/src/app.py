@@ -6,14 +6,14 @@ import csv
 import io
 import uuid
 from PIL import ImageGrab
-from flask import Flask, request, jsonify, send_from_directory, session
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pythoncom
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from agents.DocumentGeneration import DocumentGenerator
 from utils.ExcelFileHandler import ExcelFileHandler
-from utils.WorkSession import WorkSession
+from utils.Project import Project
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 app.secret_key = os.urandom(24)  # Secret key for session management
@@ -25,25 +25,11 @@ def add_csp_header(response):
 
 # Configuration for file uploads and outputs
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SESSIONS_FOLDER_BASE = os.path.join(ROOT_DIR, 'sessions')
-UPLOAD_FOLDER = os.path.join(ROOT_DIR, 'uploads')
-OUTPUT_FOLDER_BASE = os.path.join(ROOT_DIR, 'output')
-GENERATED_DOCUMENTS_FOLDER = os.path.join(os.path.dirname(ROOT_DIR), 'DGUI/generated_documents')
+
 
 ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 
-# Ensure upload and output directories exist
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-if not os.path.exists(OUTPUT_FOLDER_BASE):
-    os.makedirs(OUTPUT_FOLDER_BASE)
-if not os.path.exists(GENERATED_DOCUMENTS_FOLDER):
-    os.makedirs(GENERATED_DOCUMENTS_FOLDER)
-if not os.path.exists(SESSIONS_FOLDER_BASE): # Ensure sessions folder exists as well
-    os.makedirs(SESSIONS_FOLDER_BASE)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['OUTPUT_FOLDER_BASE'] = OUTPUT_FOLDER_BASE
-app.config['GENERATED_DOCUMENTS_FOLDER'] = GENERATED_DOCUMENTS_FOLDER
+
 
 # Create ExcelFileHandler instance
 excel_file_handler = ExcelFileHandler()
@@ -55,242 +41,316 @@ if not api_key:
     raise ValueError("GOOGLE_API_KEY not found in environment variables. Please set it in .env file.")
 generator = DocumentGenerator(api_key=api_key)
 
-# Create list of working session
-sessions = []
-current_session = None
-
 # Helper function to check allowed file extensions
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route('/list-prev-sessions', methods=['GET'])
-def list_prev_sessions():
-    """List all previous work sessions from session.json file in root."""
-    sessions_file = os.path.join(ROOT_DIR, 'sessions/sessions.json')
-    if not os.path.exists(sessions_file):
-        return jsonify({"sessions": []})
+# Global variable to track the current project
+current_project = None
+PROJECTS_REGISTRY_FILE = os.path.join(ROOT_DIR, 'projects_registry.json')
 
-    with open(sessions_file, 'r') as f:
-        sessions = json.load(f)
-    return jsonify({"sessions": sessions})
+def save_projects_registry(projects_list):
+    """Save projects list to registry file"""
+    with open(PROJECTS_REGISTRY_FILE, 'w') as f:
+        json.dump(projects_list, f, indent=4)
 
-# @app.route('/start-session', methods=['POST'])
-# def start_session():
-#     """Start a new work session and return the session ID.
-#         sample request json: {"session_name": "session_name"}
-#     """
-#     session_id = str(uuid.uuid4())
-#     session_name = request.json.get('session_name', 'Untitled')
-#     session = WorkSession(session_id, ROOT_DIR)
-#     session.set_session_name(session_name)
-#     sessions.append(session)
-#     current_session = session
-#     return jsonify({"session_id": session_id, "session_name": session_name})
-@app.route('/start-session', methods=['POST'])
-def start_session():
-    """Start a new work session and return the session ID."""
-    session_id = str(uuid.uuid4())
-    session_name = request.json.get('session_name', 'Untitled')
-    work_session = WorkSession.create_new_session(name=session_name, session_dir=SESSIONS_FOLDER_BASE)
-    session['work_session_id'] = work_session.get_session_id() # Store session ID in Flask's built-in session
-    session['work_session_data'] = work_session.to_dict() # Store session data in Flask's built-in session
-    return jsonify({"session_id": work_session.get_session_id(), "session_name": work_session.get_session_name()})
+def load_projects_registry():
+    """Load projects list from registry file"""
+    if not os.path.exists(PROJECTS_REGISTRY_FILE):
+        return []
+    try:
+        with open(PROJECTS_REGISTRY_FILE, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error reading projects registry: {e}")
+        return []
 
-@app.route('/switch-session/<session_name>', methods=['POST'])
-def switch_session(session_id):
-    """Switch to a different work session.
-        sample request json: {"session_id": "session_id"}
-    """
-    global current_session
-    for session in sessions:
-        if session.get_session_id() == session_id:
-            current_session = session
-            return jsonify({"status": "success", "session_id": session_id})
-    return jsonify({"error": "Session not found"}), 404
+@app.route('/list-projects', methods=['GET'])
+def list_projects():
+    """List all existing projects."""
+    projects = load_projects_registry()
+    return jsonify({"projects": projects})
 
-# @app.route('/end-session', methods=['POST'])
-# def end_session():
-#     """End the current work session."""
-#     global current_session
-#     print(f"Inside /end-session: current_session = {current_session}") # ADD THIS LINE
-#     if current_session is None:
-#         return jsonify({"error": "No active session"}), 400
-#     current_session.end_session()
-#     return jsonify({"status": "success"})
-@app.route('/end-session', methods=['POST'])
-def end_session():
-    """End the current work session."""
-    session_data = session.get('work_session_data') # Retrieve from Flask's built-in session
-    if session_data is None:
-        return jsonify({"error": "No active session"}), 400
+@app.route('/create-project', methods=['POST'])
+def create_project():
+    """Create a new project and return the project ID."""
+    global current_project
+    data = request.json
+    project_name = data.get('project_name', 'Untitled Project')
+    base_dir = data.get('base_dir')
+    
+    if not base_dir:
+        return jsonify({"error": "base_dir is required"}), 400
+    
+    if not os.path.exists(base_dir):
+        try:
+            os.makedirs(base_dir)
+        except Exception as e:
+            return jsonify({"error": f"Could not create directory: {str(e)}"}), 400
+    
+    project = Project(name=project_name, base_dir=base_dir)
+    project.create_directory_structure()
+    project.save_metadata()
+    
+    # Store project in global variable for reference
+    current_project = project
+    
+    # Update projects registry
+    projects = load_projects_registry()
+    projects.append({
+        "id": project.id,
+        "name": project.name,
+        "base_dir": base_dir,
+        "created_date": project.created_date.isoformat(),
+        "modified_date": project.modified_date.isoformat()
+    })
+    save_projects_registry(projects)
+    
+    return jsonify({
+        "project_id": project.id,
+        "project_name": project.name,
+        "project_dir": project.project_dir
+    })
 
-    work_session = WorkSession.from_dict(session_data)
-    work_session.end_session()
+@app.route('/load-project/<project_id>', methods=['POST'])
+def load_project(project_id):
+    """Load an existing project by ID."""
+    global current_project
+    
+    # Find the project in registry
+    projects = load_projects_registry()
+    project_info = next((p for p in projects if p["id"] == project_id), None)
+    
+    if not project_info:
+        return jsonify({"error": "Project not found in registry"}), 404
+    
+    base_dir = project_info["base_dir"]
+    for item in os.listdir(base_dir):
+        if item.endswith(f"_{project_id}"):
+            metadata_path = os.path.join(base_dir, item, "project_metadata.json")
+            if os.path.exists(metadata_path):
+                project = Project.load_from_metadata(metadata_path)
+                if project:
+                    current_project = project
+                    return jsonify({
+                        "status": "success",
+                        "project_id": project.id,
+                        "project_name": project.name,
+                        "project_dir": project.project_dir
+                    })
+    
+    # If we get here, the project was in registry but files weren't found
+    return jsonify({"error": "Project files not found"}), 404
 
-    session.pop('work_session_id', None) # Clear from Flask's built-in session
-    session.pop('work_session_data', None) # Clear from Flask's built-in session
+@app.route('/close-project', methods=['POST'])
+def close_project():
+    """Close the current project."""
+    global current_project
+    if not current_project:
+        return jsonify({"error": "No active project"}), 400
+    
+    # Save the current project metadata
+    project = current_project
+    project.modified_date = time.time()  # Using time.time() instead of datetime for consistency
+    project.save_metadata()
+    
+    # Update project in registry
+    projects = load_projects_registry()
+    for p in projects:
+        if p["id"] == project.id:
+            p["modified_date"] = project.modified_date
+            break
+    save_projects_registry(projects)
+    
+    # Clear the current project
+    current_project = None
     return jsonify({"status": "success"})
 
-@app.route('/end-all-sessions', methods=['POST'])
-def end_all_sessions():
-    """End all active work sessions."""
-    for session in sessions:
-        session.end_session()
-    return jsonify({"status": "success"})
+@app.route('/project-details', methods=['GET'])
+def project_details():
+    """Get details of the current project."""
+    global current_project
+    if not current_project:
+        return jsonify({"error": "No active project"}), 400
+    
+    # Return the project metadata from the current project object
+    return jsonify({
+        "id": current_project.id,
+        "name": current_project.name,
+        "base_dir": current_project.base_dir,
+        "created_date": current_project.created_date,
+        "modified_date": current_project.modified_date,
+        "project_dir": current_project.project_dir,
+        "files": current_project.files
+    })
 
 
 @app.route('/health', methods=['GET'])
 def health_check():
     """Simple health check endpoint"""
     return jsonify({"status": "ok"})
-
 @app.route('/upload-excel', methods=['POST'])
 def upload_excel():
-    """Upload an Excel file to the server."""
-    session_data = session.get('work_session_data') # Get session data from Flask session
-    if session_data is None:
-        return jsonify({"error": "No active session. Please start a session first."}), 400
-    work_session = WorkSession.from_dict(session_data) # Recreate WorkSession object
-
-    print("UPLOAD-EXCEL: Request Files:", request.files) # ADD LOGGING
+    """Upload an Excel file to the current project."""
+    global current_project
+    
+    if not current_project:
+        return jsonify({"error": "No active project. Please create or load a project first."}), 400
 
     if 'file' not in request.files:
-        print("UPLOAD-EXCEL: Error - 'file' part missing in request") # ADD LOGGING
         return jsonify({"error": "No file part in the request"}), 400
 
     file = request.files['file']
-    print("UPLOAD-EXCEL: File object:", file) # ADD LOGGING
 
     if file.filename == '':
-        print("UPLOAD-EXCEL: Error - No file selected (empty filename)") # ADD LOGGING
         return jsonify({"error": "No file selected"}), 400
 
-    if file and not allowed_file(file.filename): # Combined condition for clarity
-        print(f"UPLOAD-EXCEL: Error - Invalid file type: {file.filename}") # ADD LOGGING
+    if not allowed_file(file.filename):
         return jsonify({"error": f"Invalid file type. Allowed types are: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
 
-    if file and allowed_file(file.filename): # Redundant check, but keep for now, add log for success
-        session_uuid = work_session.get_session_id() # Get session ID from work_session
-        session_folder = os.path.join(app.config['UPLOAD_FOLDER'], session_uuid)
-        os.makedirs(session_folder, exist_ok=True)
-        original_filename = secure_filename(file.filename)
-        file_path = os.path.join(session_folder, original_filename)
-        file.save(file_path)
-
-        print(f"UPLOAD-EXCEL: Success - File saved to: {file_path}") # ADD LOGGING
-
-        return jsonify({
-            "status": "success",
-            "message": "File uploaded successfully",
-            "file_id": session_uuid, # Return UUID as file_id (session ID)
-            "original_filename": original_filename,
-            "file_path": file_path
-        })
-    else: # This 'else' is likely unreachable now with combined condition, but keep for safety, add log
-        print("UPLOAD-EXCEL: Error - Unhandled case or file is None (should not reach here if 'file' in request)") # ADD LOGGING
-        return jsonify({"error": "Unknown file upload error"}), 400
+    original_filename = secure_filename(file.filename)
+    file_path = os.path.join(current_project.input_dir, original_filename)
+    file.save(file_path)
     
-    
-@app.route('/process-excel', methods=['POST'])
-def api_process_excel():
-    """Process Excel file sheets and save as CSV or images."""
-    if current_session is None:
-        return jsonify({"error": "No active session. Please start a session first."}), 400
-    try:
-        data = request.json
-        if not all(key in data for key in ['file_id', 'sheets']):
-            return jsonify({"error": "Missing required fields. Required: file_id, sheets"}), 400
-
-        file_id = data['file_id'] # file_id is now the UUID folder
-        session_folder = os.path.join(app.config['UPLOAD_FOLDER'], file_id)
-
-        # Find the uploaded Excel file in the session folder
-        excel_files = [f for f in os.listdir(session_folder) if allowed_file(f)]
-        if not excel_files:
-            return jsonify({"error": f"No valid Excel file found in session folder: {file_id}"}), 404
-        excel_filename = excel_files[0] # Assume only one excel file per session for simplicity
-        excel_file_path = os.path.join(session_folder, excel_filename)
-
-        output_folder = os.path.join(app.config['OUTPUT_FOLDER_BASE'], file_id) # Output folder is UUID named
-
-        if os.path.exists(output_folder):
-            for file in os.listdir(output_folder):
-                file_path = os.path.join(output_folder, file)
-                try:
-                    if os.path.isfile(file_path) or os.path.islink(file_path):
-                        os.unlink(file_path)
-                except Exception as e:
-                    print(f"Error deleting file {file_path}: {e}")
-        else:
-            os.makedirs(output_folder)
-
-
-        result = excel_file_handler.process_sheets(
-            excel_file_path,
-            output_folder,
-            data['sheets']
-        )
-        result["output_folder"] = output_folder # Return UUID named output folder path
-        return jsonify(result)
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    pass
-
-@app.route('/get-sheets/<file_id>', methods=['GET'])
-def get_sheets(file_id):
-    if current_session is None:
-        return jsonify({"error": "No active session. Please start a session first."}), 400
-    session_folder = os.path.join(app.config['UPLOAD_FOLDER'], file_id)
-    excel_files = [f for f in os.listdir(session_folder) if allowed_file(f)]
-    if not excel_files:
-        return jsonify({"error": f"No valid Excel file found in session folder: {file_id}"}), 404
-    excel_filename = excel_files[0]
-    excel_file_path = os.path.join(session_folder, excel_filename)
-
-
-    if not os.path.exists(excel_file_path):
-        return jsonify({"error": f"File not found in session: {file_id}"}), 404
-
-    sheet_names = excel_file_handler.get_sheet_names(excel_file_path)
-
-    if isinstance(sheet_names, dict) and "error" in sheet_names:
-        return jsonify(sheet_names), 500
+    # Add file to project tracking
+    current_project.add_file(file_path, "input")
+    current_project.save_metadata()
 
     return jsonify({
         "status": "success",
-        "file_id": file_id, # Return UUID as file_id
-        "sheets": sheet_names
+        "message": "File uploaded successfully",
+        "project_id": current_project.id,
+        "original_filename": original_filename,
+        "file_path": file_path
+    })
+
+@app.route('/get-sheets', methods=['POST'])
+def get_sheets():
+    """Get sheets from all Excel files in the current project."""
+    global current_project
+    
+    if not current_project:
+        return jsonify({"error": "No active project. Please create or load a project first."}), 400
+    
+    excel_files = current_project.files.get("input", [])
+    
+    if not excel_files:
+        return jsonify({"error": "No Excel files found in project"}), 404
+    
+    result = {}
+    
+    for excel_file in excel_files:
+        sheets = excel_file_handler.get_sheet_names(excel_file)
+        
+        if isinstance(sheets, dict) and "error" in sheets:
+            # Skip files with errors but continue processing others
+            result[excel_file] = {"error": sheets["error"]}
+        else:
+            result[excel_file] = sheets
+    
+    return jsonify({
+        "status": "success",
+        "project_id": current_project.id,
+        "files": result
     })
     
+@app.route('/process-excel', methods=['POST'])
+def process_excel():
+    """Process Excel file sheets and save as CSV or images."""
+    global current_project
+    
+    if not current_project:
+        return jsonify({"error": "No active project. Please create or load a project first."}), 400
+    
+    try:
+        # Get sheet types from request - should be a dictionary of {"sheetName": "type"}
+        sheet_types = request.json.get('sheets', {})
+        
+        if not sheet_types:
+            return jsonify({"error": "No sheet types provided. Please specify sheet types."}), 400
+            
+        # Get all xls and xlsx files in the input directory
+        excel_files = current_project.files.get("input", [])
+        output_dir = current_project.output_dir
+        if not excel_files:
+            return jsonify({"error": "No Excel files found in the project input directory."}), 404
+
+        has_error = False
+        
+        # Process all excel files
+        for excel_file in excel_files:
+            result = excel_file_handler.process_sheets(excel_file, output_dir, sheet_types)
+            for sheet in result:
+                if result[sheet]["status"] == "success":
+                    current_project.add_file(result[sheet]["output_path"], "output")
+            
+            if isinstance(result, dict) and "error" in result:
+                has_error = True
+                
+        # Add processing record to project
+        current_project.add_processing_record(
+            operation="excel_processing",
+            input_files=excel_files,
+            output_files=current_project.files.get("output", []),
+            details={"sheet_types": sheet_types}
+        )
+        current_project.save_metadata()
+        
+        # Return comprehensive results
+        return jsonify({
+            "status": "error" if has_error else "success",
+            "project_id": current_project.id,
+            "results": current_project.files.get("output", [])
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 
 @app.route('/generate-documents', methods=['POST'])
 def generate_documents():
-    if current_session is None:
-        return jsonify({"error": "No active session. Please start a session first."}), 400
+    """Generate documents based on processed data."""
+    global current_project
     
-@app.route('/api/class-diagram', methods=['POST']) # Changed route name to /api/class-diagram and using POST
+    if not current_project:
+        return jsonify({"error": "No active project. Please create or load a project first."}), 400
+    
+    # Implement document generation logic here
+    return jsonify({"status": "Not implemented yet"})
+    
+@app.route('/api/class-diagram', methods=['POST'])
 def get_class_diagram():
     """API endpoint to generate class diagram data from Gemini."""
-    if current_session is None:
-        return jsonify({"error": "No active session. Please start a session first."}), 400
+    global current_project
+    
+    if not current_project:
+        return jsonify({"error": "No active project. Please create or load a project first."}), 400
 
     try:
-        data_dir = os.path.join(app.config['OUTPUT_FOLDER_BASE'], current_session.get_session_id()) # Use session output folder
+        # Use the project's processed directory
+        data_dir = current_project.processed_dir
         files = generator.scan_data_directory(data_dir)
         csv_data = generator.read_csv_data(files["csvs"])
 
-        if not csv_data: # Check if csv_data is empty
+        if not csv_data:
             return jsonify({"error": "No CSV data found to generate class diagram."}), 400
 
-        diagram_data = generator.generate_class_diagram(csv_data) # Call the updated generate_class_diagram
+        diagram_data = generator.generate_class_diagram(csv_data)
+        
+        # Add processing record to project
+        current_project.add_processing_record(
+            operation="class_diagram_generation",
+            input_files=files["csvs"],
+            output_files=[],
+            details={"diagram_type": "class_diagram"}
+        )
+        current_project.save_metadata()
 
         return jsonify(diagram_data), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
 
 
 if __name__ == '__main__':

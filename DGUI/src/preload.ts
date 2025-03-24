@@ -6,6 +6,6 @@ contextBridge.exposeInMainWorld('myAPI', {
   selectFolder: () => ipcRenderer.invoke('dialog:openDirectory'),
   readFileAsBase64: (path: string) => ipcRenderer.invoke('file:readFileAsBase64', path),
   readFileAsText: (path: string) => ipcRenderer.invoke('file:readFileAsText', path),
-  saveFile: (path: string, content: string) => ipcRenderer.invoke('file:saveFile', path, content)
-  
+  saveFile: (path: string, content: string) => ipcRenderer.invoke('file:saveFile', path, content),
+  processedFileFromProject: (project: any) => ipcRenderer.invoke('view:processedFileFromProject', project)
 })

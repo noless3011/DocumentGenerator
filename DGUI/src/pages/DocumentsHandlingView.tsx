@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Project } from 'src/components/DocumentsHandling/ProjectManagingMenu';
 import * as XLSX from 'xlsx';
 
 interface SheetOption {
@@ -10,86 +11,27 @@ interface SheetOption {
 
 interface DocumentsHandlingProps {
     switchTab: (tabIndex: number) => void;
-    setFileDirs: (fileDirs: string[]) => void;
+    project: Project;
 }
 
-const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFileDirs }) => {
+const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, project }) => {
     const [fileName, setFileName] = useState<string>('');
-    const [outputFolder, setOutputFolder] = useState<string>('');
     const [sheets, setSheets] = useState<SheetOption[]>([]);
     const [previewData, setPreviewData] = useState<any[][]>([]);
     const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
     const [currentPreviewSheet, setCurrentPreviewSheet] = useState<string>('');
-    const [fileId, setFileId] = useState<string>(''); // To store the uploaded file ID
     const [processing, setProcessing] = useState<boolean>(false);
     const [processingResults, setProcessingResults] = useState<any>(null);
     const [generating, setGenerating] = useState<boolean>(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const workbookRef = useRef<XLSX.WorkBook | null>(null);
-    const [sessionId, setSessionId] = useState<string | null>(null);
-    const [sessionName, setSessionName] = useState<string>('');
-
-
-    const startNewSession = async () => {
-        try {
-            const response = await fetch('http://localhost:5000/start-session', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ session_name: sessionName || 'Untitled Session' }),
-                mode: 'cors',
-                credentials: 'include', // ADD THIS LINE
-            });
-    
-            if (!response.ok) {
-                const errorResult = await response.json();
-                throw new Error(errorResult.error || `Failed to start session: ${response.status}`);
-            }
-    
-            const result = await response.json();
-            setSessionId(result.session_id);
-            alert(`Session "${result.session_name}" started successfully! Session ID: ${result.session_id}`);
-        } catch (error) {
-            console.error('Error starting session:', error);
-            alert(error instanceof Error ? error.message : 'An error occurred while starting the session.');
-        }
-    };
-
-    const endSession = async () => {
-        if (!sessionId) {
-            alert('No active session to end.');
-            return;
-        }
-        try {
-            const response = await fetch('http://localhost:5000/end-session', {
-                method: 'POST',
-                mode: 'cors',
-                credentials: 'include', 
-            });
-    
-            if (!response.ok) {
-                const errorResult = await response.json();
-                throw new Error(errorResult.error || `Failed to end session: ${response.status}`);
-            }
-    
-            setSessionId(null);
-            setSessionName('');
-            alert('Session ended successfully.');
-        } catch (error) {
-            console.error('Error ending session:', error);
-            alert(error instanceof Error ? error.message : 'An error occurred while ending the session.');
-        }
-    };
-
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        if (!sessionId) {
-            alert('Please start a session before uploading a file.');
-            return;
+        if (!project) {
+            alert('Please load or create a project first.');
         }
 
         setFileName(file.name);
@@ -97,19 +39,18 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
         setPreviewData([]); // Clear preview data
         setPreviewHeaders([]); // Clear preview headers
         setProcessingResults(null); // Clear processing results
-        setFileId(''); // Clear previous fileId
 
         try {
             // Create form data for file upload
             const formData = new FormData();
-            formData.append('file', file); 
-    
+            formData.append('file', file);
+
             // Upload file to backend
             const uploadResponse = await fetch('http://localhost:5000/upload-excel', {
                 method: 'POST',
                 body: formData,
                 mode: 'cors',
-                credentials: 'include', 
+                credentials: 'include',
             });
 
             if (!uploadResponse.ok) {
@@ -119,11 +60,8 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
 
             const uploadResult = await uploadResponse.json();
 
-            // Store the file ID for later use
-            setFileId(uploadResult.file_id);
-
             // Get sheet names from the uploaded file
-            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets/${uploadResult.file_id}`, {
+            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
                 method: 'GET',
                 mode: 'cors'
             });
@@ -151,20 +89,21 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                 // No need to handle preview logic immediately here, let user click preview button
             }
             alert('File uploaded and sheets loaded successfully!');
-
+            if (project) {
+                project.base_dir = uploadResult.output_folder;
+            }
 
         } catch (error) {
             console.error('Error handling file:', error);
             alert(error instanceof Error ? error.message : 'An unknown error occurred during file upload.');
             setFileName(''); // Reset file name on error
             setSheets([]); // Clear sheets on error
-            setFileId(''); // Clear fileId on error
         }
     };
 
     const handlePreviewSheet = async (sheetName: string) => {
         try {
-            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets/${fileId}`, {
+            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
                 method: 'GET',
                 mode: 'cors'
             });
@@ -175,8 +114,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
             }
             const sheetsResult = await sheetsResponse.json();
 
-            // Simulate reading sheet data from backend (replace with actual API if needed for preview data)
-            // For now, re-parse the file on frontend for preview (efficient for small previews)
             const fileInput = fileInputRef.current?.files?.[0];
             if (!fileInput) return;
 
@@ -223,12 +160,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
     };
 
 
-    const handleOutputFolderSelect = () => {
-        window.myAPI.selectFolder().then((folderPath) => {
-            setOutputFolder(folderPath);
-        })
-    };
-
     const handleSheetSelectionChange = (index: number) => {
         const updatedSheets = [...sheets];
         updatedSheets[index].selected = !updatedSheets[index].selected;
@@ -242,14 +173,11 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
     };
 
     const handleProcessSheets = async () => {
-        if (!fileId) {
-            alert('Please upload an Excel file first.');
+        if (!project) {
+            alert('Please create/load a project first.');
             return;
         }
-        if (!sessionId) {
-            alert('Please start a session before processing sheets.');
-            return;
-        }
+
 
         const selectedSheetTypes = sheets.reduce((acc, sheet) => {
             if (sheet.selected) {
@@ -264,7 +192,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
         }
 
         const payload = {
-            file_id: fileId,
             sheets: selectedSheetTypes
         };
 
@@ -300,10 +227,10 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
     };
 
     const handleGenerateDocuments = async () => {
-        if (!sessionId) {
-            alert('Please start a session before generating documents.');
-            return;
+        if (!project) {
+            alert('Please load or create a project first.');
         }
+
         try {
             setGenerating(true);
             const response = await fetch('http://localhost:5000/generate-documents', {
@@ -311,9 +238,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    ...(outputFolder && { output_dir: outputFolder })
-                }),
                 mode: 'cors'
             });
 
@@ -325,9 +249,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
 
             const result = await response.json();
 
-            if (result.generated_files && Array.isArray(result.generated_files)) {
-                setFileDirs(result.generated_files);
-            }
             alert(`Documents generated successfully! ${result.count} file(s) created in ${result.output_dir}`);
             switchTab(1); // Switch to the Results tab
         } catch (error) {
@@ -343,39 +264,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
             {/* Left Panel - Controls */}
             <div className="w-full md:w-1/3 p-4 bg-gray-100 border-r border-gray-200 flex flex-col">
                 <h2 className="panel-title text-xl font-semibold mb-4">Excel File Handler</h2>
-
-                {/* Session Management */}
-                <div className="session-container mb-6">
-                    <p className="section-label text-sm font-medium text-gray-700 mb-2">Session Management</p>
-                    <div className="mb-2">
-                        <input
-                            type="text"
-                            placeholder="Session Name (Optional)"
-                            className="session-name-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline text-sm"
-                            value={sessionName}
-                            onChange={(e) => setSessionName(e.target.value)}
-                        />
-                    </div>
-                    <div className="button-row flex space-x-2">
-                        <button
-                            onClick={startNewSession}
-                            className="primary-button bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline text-sm"
-                            disabled={sessionId != null}
-                        >
-                            Start Session
-                        </button>
-                        <button
-                            onClick={endSession}
-                            className="primary-button bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline text-sm"
-                            disabled={sessionId == null}
-                        >
-                            End Session
-                        </button>
-                    </div>
-                    {sessionId && <p className="text-gray-500 text-xs italic mt-1">Current Session ID: {sessionId}</p>}
-                </div>
-
-
                 {/* File Uploader */}
                 <div className="upload-container mb-6">
                     <p className="section-label text-sm font-medium text-gray-700 mb-2">Upload Excel File</p>
@@ -391,7 +279,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             className="primary-button bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                            disabled={!sessionId}
+                            disabled={!project}
                         >
                             Select File
                         </button>
@@ -399,26 +287,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                             {fileName || 'No file selected'}
                         </span>
                     </div>
-                    {!sessionId && <p className="text-red-500 text-xs italic mt-1">Please start a session first to upload file.</p>}
-                </div>
-
-                {/* Output Folder Selector */}
-                <div className="folder-container mb-6">
-                    <p className="section-label text-sm font-medium text-gray-700 mb-2">Output Folder for Document Generation</p>
-                    <div className="button-row flex items-center space-x-2">
-                        <button
-                            onClick={handleOutputFolderSelect}
-                            className="primary-button bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                        >
-                            Select Folder
-                        </button>
-                        <span className="folder-path text-gray-600 text-sm truncate">
-                            {outputFolder || 'No folder selected'}
-                        </span>
-                    </div>
-                    <p className="text-gray-500 text-xs italic mt-1">
-                        Choose where to save generated documents
-                    </p>
+                    {!project && <p className="text-red-500 text-xs italic mt-1">Please load/create first to upload file.</p>}
                 </div>
 
                 {/* Sheet List with Options */}
@@ -474,7 +343,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                             <button
                                 className="process-button mt-4 bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
                                 onClick={handleProcessSheets}
-                                disabled={processing || !sessionId}
+                                disabled={processing || !project}
                             >
                                 {processing ? 'Processing...' : 'Process Selected Sheets'}
                             </button>
@@ -482,11 +351,11 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                             <button
                                 className="process-button mt-4 bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
                                 onClick={handleGenerateDocuments}
-                                disabled={generating || !sessionId}
+                                disabled={generating || !project}
                             >
                                 {generating ? 'Asking LLM...' : 'Generate Documents'}
                             </button>
-                            {!sessionId && <p className="text-red-500 text-xs italic mt-1">Please start a session first to process or generate documents.</p>}
+                            {!project && <p className="text-red-500 text-xs italic mt-1">Please start a session first to process or generate documents.</p>}
                         </div>
                     )}
                 </div>
