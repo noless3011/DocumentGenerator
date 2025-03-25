@@ -22,30 +22,52 @@ const ResultsView: React.FC<ResultsViewProps> = ({ project }) => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        if (!project) { // Add check at the beginning of useEffect
+            console.log("ResultsView useEffect: project is null or undefined. Skipping fetch.");
+            return; // Exit useEffect if project is invalid
+        }
         const fetchProjectFiles = async () => {
             if (!project) return;
             setLoading(true);
-            window.myAPI.getProcessedFilesFromProject(project)
-                .then((files) => {
-                    const newTabs: TabProps[] = [];
+            setError(null); // Reset error state at the beginning
+            
+            try {
+                // Check if window.myAPI exists first
+                if (!window.myAPI) {
+                    throw new Error('myAPI is not available. This could indicate the preload script is not loaded correctly.');
+                }
+                
+                const files = await window.myAPI.getProcessedFilesFromProject(project);
+                console.log('Received files:', files);
+                
+                const newTabs: TabProps[] = [];
+                
+                // Make sure we don't double-add markdown files
+                if (files?.markdown) {
                     files.markdown.forEach((file) => {
-                        newTabs.push({ title: file, dir: `processed/${file}`, type: 'Markdown' });
+                        newTabs.push({ title: file, dir: `output/${file}`, type: 'Markdown' });
                     });
+                }
+                
+                if (files?.image) {
                     files.image.forEach((file) => {
-                        newTabs.push({ title: file, dir: `processed/${file}`, type: 'Image' });
+                        newTabs.push({ title: file, dir: `output/${file}`, type: 'Image' });
                     });
+                }
+                
+                if (files?.json) {
                     files.json.forEach((file) => {
-                        newTabs.push({ title: file, dir: `processed/${file}`, type: 'Diagram' });
+                        newTabs.push({ title: file, dir: `output/${file}`, type: 'Diagram' });
                     });
-                    setTabs(newTabs);
-                    setLoading(false);
                 }
-                )
-                .catch((error) => {
-                    setError(error);
-                    setLoading(false);
-                }
-                );
+                
+                setTabs(newTabs);
+            } catch (error) {
+                console.error('Error fetching project files:', error);
+                setError(error instanceof Error ? error.message : String(error));
+            } finally {
+                setLoading(false);
+            }
         }
 
         fetchProjectFiles();
@@ -96,18 +118,18 @@ const ResultsView: React.FC<ResultsViewProps> = ({ project }) => {
                             {loading ? (
                                 <div className="text-center text-gray-500 mt-10">Loading files...</div>
                             ) : error ? (
-                                <div className="text-center text-red-500 mt-10">{error}</div>
+                                <div className="text-center text-red-500 mt-10">{String(error)}</div> // Ensure error is a string
                             ) : selectedTabIndex !== -1 && tabs[selectedTabIndex] ? (
                                 (() => {
                                     const selectedTab = tabs[selectedTabIndex];
-                                    const basePath = `${project.base_dir}/`;
+                                    const projectDir = project.project_dir || `${project.base_dir}/${project.name}_${project.id}`;
                                     switch (selectedTab.type) {
                                         case 'Image':
-                                            return <ImageView key={selectedTabIndex} fileDir={`${basePath}${selectedTab.dir}`} />;
+                                            return <ImageView key={selectedTabIndex} fileDir={`${projectDir}/${selectedTab.dir}`} />;
                                         case 'Markdown':
-                                            return <MarkdownView key={selectedTabIndex} fileDir={`${basePath}${selectedTab.dir}`} />;
+                                            return <MarkdownView key={selectedTabIndex} fileDir={`${projectDir}/${selectedTab.dir}`} />;
                                         case 'Diagram':
-                                            return <DiagramView key={selectedTabIndex} fileDir={`${basePath}${selectedTab.dir}`} />;
+                                            return <DiagramView key={selectedTabIndex} fileDir={`${projectDir}/${selectedTab.dir}`} />;
                                         default:
                                             return <div key={selectedTabIndex}>Invalid file type</div>;
                                     }

@@ -56,35 +56,36 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
 
     useEffect(() => {
         const container = diagramRef.current;
+        let diagram: ClassDiagram | null = null;
+        
         if (container) {
-            const diagram = new ClassDiagram(container);
+            // Create new diagram instance
+            diagram = new ClassDiagram(container);
             setClassDiagramInstance(diagram);
-            //Fetch from backend here
-            // Fetch initial class diagram data from backend API
-            fetch('/api/class-diagram', { // <-- ENSURE URL IS CORRECT:  '/api/class-diagram' (or '/api/generate-class-diagram-data' if you kept that)
-                method: 'POST', // <-- ENSURE METHOD IS POST (or GET if you changed backend)
+            
+            // Fetch class diagram data
+            fetch('http://localhost:5000/api/class-diagram', {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                // body: JSON.stringify({ data_dir: 'your_data_directory' }), // If needed
             })
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 return response.json();
-                return response.json() as Promise<ClassDiagramResponse>; 
             })
             .then(diagramData => {
-                if (diagramData && diagramData.classes && diagramData.relationships) {
+                if (diagram && diagramData && diagramData.classes && diagramData.relationships) {
                     // Process classes and relationships from JSON data
-                    diagramData.classes.forEach((classData: ClassDataFromBackend) => { // Type classData
-                        diagram.addClass(classData.name, classData.loc ? parseInt(classData.loc.split(' ')[0]) : 200, classData.loc ? parseInt(classData.loc.split(' ')[1]) : 200);
+                    diagramData.classes.forEach((classData: ClassDataFromBackend) => {
+                        diagram?.addClass(classData.name, classData.loc ? parseInt(classData.loc.split(' ')[0]) : 200, classData.loc ? parseInt(classData.loc.split(' ')[1]) : 200);
                     });
-                    diagramData.relationships.forEach((relationshipData: RelationshipDataFromBackend) => { // Type relationshipData
-                        diagram.addLink(relationshipData.from, relationshipData.to, relationshipData.relationship);
+                    diagramData.relationships.forEach((relationshipData: RelationshipDataFromBackend) => {
+                        diagram?.addLink(relationshipData.from, relationshipData.to, relationshipData.relationship);
                     });
-                } else if (diagramData && diagramData.error) { // Handle error from backend JSON
+                } else if (diagramData && diagramData.error) {
                     alert(`Error loading diagram data: ${diagramData.error}`);
                 }
             })
@@ -93,8 +94,15 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
                 alert("Failed to load initial class diagram data from backend.");
             });
         }
-        return () => { };
-    }, []);
+        
+        // Cleanup function to dispose of the diagram when component unmounts
+        return () => {
+            if (diagram) {
+                diagram.dispose();
+                setClassDiagramInstance(null);
+            }
+        };
+    }, []); // Empty dependency array means this effect runs once on mount
 
     // Function update class dropdown options
     const updateClassDropdowns = useCallback(() => {

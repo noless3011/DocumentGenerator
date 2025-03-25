@@ -89,14 +89,18 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
         try {
             const response = await fetch('http://localhost:5000/project-details');
             const data = await response.json();
+            
             if (response.ok) {
                 setCurrentProject(data);
             } else {
+                // This is expected when no project is loaded
                 setCurrentProject(null);
+                // Don't show an error for this case - it's normal to have no project loaded initially
+                console.log("No active project. This is normal if no project has been loaded yet.");
             }
         } catch (err) {
             setCurrentProject(null);
-            console.error(err);
+            console.error("Error fetching current project:", err);
         }
     };
 
@@ -160,18 +164,24 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
                 method: 'POST',
             });
             const data = await response.json();
-            const project: Project = {
-                id: data.project_id,
-                name: newProjectName,
-                base_dir: baseDir,
-                created_date: data.created_date,
-                modified_date: data.modified_date
-            };
+            
             if (response.ok) {
-                fetchCurrentProject();
+                // Create a proper project object with all required fields
+                const project: Project = {
+                    id: data.project_id,
+                    name: data.project_name,
+                    base_dir: data.base_dir || projects.find(p => p.id === projectId)?.base_dir || '',
+                    project_dir: data.project_dir,
+                    created_date: data.created_date || new Date().toISOString(),
+                    modified_date: data.modified_date || new Date().toISOString()
+                };
+                
+                setCurrentProject(project);
+                
                 if (onProjectLoaded) {
                     onProjectLoaded(project);
                 }
+                
                 handleClose();
             } else {
                 setError(data.error || 'Failed to load project');

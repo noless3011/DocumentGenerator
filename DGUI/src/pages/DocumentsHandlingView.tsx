@@ -32,20 +32,19 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
 
         if (!project) {
             alert('Please load or create a project first.');
+            return;
         }
 
         setFileName(file.name);
-        setSheets([]); // Clear previous sheets
-        setPreviewData([]); // Clear preview data
-        setPreviewHeaders([]); // Clear preview headers
-        setProcessingResults(null); // Clear processing results
+        setSheets([]);
+        setPreviewData([]);
+        setPreviewHeaders([]);
+        setProcessingResults(null);
 
         try {
-            // Create form data for file upload
             const formData = new FormData();
             formData.append('file', file);
 
-            // Upload file to backend
             const uploadResponse = await fetch('http://localhost:5000/upload-excel', {
                 method: 'POST',
                 body: formData,
@@ -60,10 +59,10 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
 
             const uploadResult = await uploadResponse.json();
 
-            // Get sheet names from the uploaded file
             const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
-                method: 'GET',
-                mode: 'cors'
+                method: 'POST',
+                mode: 'cors',
+                credentials: 'include'
             });
 
             if (!sheetsResponse.ok) {
@@ -73,20 +72,17 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
 
             const sheetsResult = await sheetsResponse.json();
 
-            // Map sheet names to sheet options
             const sheetOptions: SheetOption[] = sheetsResult.sheets.map((name: string) => ({
                 name,
                 selected: true,
-                options: ['UI', 'Table'], // Removed Diagram and Others as per backend options
+                options: ['UI', 'Table'],
                 selectedOption: 'UI'
             }));
 
             setSheets(sheetOptions);
 
-            // Preview the first sheet if available
             if (sheetOptions.length > 0) {
                 setCurrentPreviewSheet(sheetOptions[0].name);
-                // No need to handle preview logic immediately here, let user click preview button
             }
             alert('File uploaded and sheets loaded successfully!');
             if (project) {
@@ -96,15 +92,15 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
         } catch (error) {
             console.error('Error handling file:', error);
             alert(error instanceof Error ? error.message : 'An unknown error occurred during file upload.');
-            setFileName(''); // Reset file name on error
-            setSheets([]); // Clear sheets on error
+            setFileName('');
+            setSheets([]);
         }
     };
 
     const handlePreviewSheet = async (sheetName: string) => {
         try {
             const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
-                method: 'GET',
+                method: 'POST',
                 mode: 'cors'
             });
 
@@ -121,7 +117,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
             reader.onload = (e) => {
                 const binaryString = e.target?.result;
                 const workbook = XLSX.read(binaryString, { type: 'binary' });
-                workbookRef.current = workbook; // Store workbook for later use
+                workbookRef.current = workbook;
 
                 const worksheet = workbook.Sheets[sheetName];
 
@@ -129,16 +125,15 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                     const jsonData = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1, defval: '' });
 
                     if (jsonData.length > 0) {
-                        // First row as headers
                         const headers = (jsonData[0] as any[]).map(h => h?.toString() || '');
-                        const rows = jsonData.slice(1, 21); // Preview up to 20 rows
+                        const rows = jsonData.slice(1, 21);
 
                         setPreviewHeaders(headers);
                         setPreviewData(rows);
                         setCurrentPreviewSheet(sheetName);
                     } else {
                         setPreviewHeaders([]);
-                        setPreviewData([[]]); // Show empty table if no data
+                        setPreviewData([[]]);
                         setCurrentPreviewSheet(sheetName);
                         alert(`Sheet "${sheetName}" is empty.`);
                     }
@@ -197,7 +192,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
 
         try {
             setProcessing(true);
-            setProcessingResults(null); // Clear previous results
+            setProcessingResults(null);
 
             const response = await fetch('http://localhost:5000/process-excel', {
                 method: 'POST',
@@ -248,9 +243,11 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
 
 
             const result = await response.json();
+            console.log("Generate Documents Result:", result);
 
-            alert(`Documents generated successfully! ${result.count} file(s) created in ${result.output_dir}`);
-            switchTab(1); // Switch to the Results tab
+            // alert(`Documents generated successfully! ${result.count} file(s) created in ${result.output_dir}`);
+            alert('Documents generated successfully!'); 
+            switchTab(1);
         } catch (error) {
             console.error('Error generating documents:', error);
             alert('Failed to generate documents. Check console for details.');
@@ -403,12 +400,23 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                 {processingResults && (
                     <div className="processing-results mt-6">
                         <h3 className="text-lg font-semibold mb-2">Processing Results</h3>
+                        <p>Project ID: {processingResults.project_id}</p>
+                        <p>Status: {processingResults.status}</p>
                         <ul className="list-disc pl-5">
-                            {Object.entries(processingResults).map(([sheetName, result]) => (
-                                <li key={sheetName} className="mb-1">
-                                    <strong className="font-medium">{sheetName}:</strong> <span className="text-sm">{(result as any).status === 'success'
-                                        ? `Processed as ${(result as any).type}, output in: ${(result as any).output_folder}` // Changed to output_folder as per API
-                                        : `Error: ${(result as any).message}`}</span>
+                            {Object.entries(processingResults.results).map(([fileName, fileResults]) => (
+                                <li key={fileName} className="mb-2">
+                                    <strong className="font-medium">{fileName}:</strong>
+                                    <ul>
+                                        {Object.entries(fileResults).map(([sheetName, sheetResult]) => (
+                                            <li key={sheetName}>
+                                                <strong className="font-medium ml-4">{sheetName}:</strong> <span className="text-sm">
+                                                    {sheetResult.status === 'success'
+                                                        ? `Processed as ${sheetResult.type}, output in: ${sheetResult.output_path}`
+                                                        : `Error: ${sheetResult.message}`}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </li>
                             ))}
                         </ul>

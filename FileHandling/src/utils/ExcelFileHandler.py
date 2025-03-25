@@ -16,6 +16,7 @@ class ExcelFileHandler:
 
     def get_sheet_names(self, excel_file_path: str) -> Union[List[str], Dict[str, str]]:
         """Gets all sheet names from an Excel file."""
+        print(f"Checking excel_file_path: {excel_file_path}")
         if not os.path.exists(excel_file_path):
             return {"error": f"Excel file not found: {excel_file_path}"}
 

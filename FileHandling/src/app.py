@@ -224,51 +224,59 @@ def upload_excel():
         "file_path": file_path
     })
 
-@app.route('/get-sheets', methods=['POST'])
+@app.route('/get-sheets', methods=['POST']) # Keep as POST
 def get_sheets():
     """Get sheets from all Excel files in the current project."""
     global current_project
-    
+
     if not current_project:
         return jsonify({"error": "No active project. Please create or load a project first."}), 400
-    
+
     excel_files = current_project.files.get("input", [])
-    
+
     if not excel_files:
         return jsonify({"error": "No Excel files found in project"}), 404
-    
-    result = {}
-    
-    for excel_file in excel_files:
-        sheets = excel_file_handler.get_sheet_names(excel_file)
-        
-        if isinstance(sheets, dict) and "error" in sheets:
-            # Skip files with errors but continue processing others
-            result[excel_file] = {"error": sheets["error"]}
-        else:
-            result[excel_file] = sheets
-    
-    return jsonify({
-        "status": "success",
-        "project_id": current_project.id,
-        "files": result
-    })
+
+    all_sheet_names = [] # Initialize an empty list to collect sheet names
+    result = {} # Keep the result dictionary for potential errors per file
+
+    try:
+        for excel_file_data in excel_files:
+            excel_file_path = excel_file_data['path']
+            sheets_or_error = excel_file_handler.get_sheet_names(excel_file_path)
+
+            if isinstance(sheets_or_error, dict) and "error" in sheets_or_error:
+                result[excel_file_path] = {"error": sheets_or_error["error"]}
+            else:
+                result[excel_file_path] = sheets_or_error
+                all_sheet_names.extend(sheets_or_error) # Extend the list with sheet names from current file
+
+        return jsonify({
+            "status": "success",
+            "project_id": current_project.id,
+            "sheets": all_sheet_names # Return the collected list of sheet names under "sheets"
+        })
+
+    except Exception as e:
+        error_message = f"Error in /get-sheets: {str(e)}"
+        print(error_message)
+        return jsonify({"error": error_message}), 500
     
 @app.route('/process-excel', methods=['POST'])
 def process_excel():
     """Process Excel file sheets and save as CSV or images."""
     global current_project
-    
+
     if not current_project:
         return jsonify({"error": "No active project. Please create or load a project first."}), 400
-    
+
     try:
         # Get sheet types from request - should be a dictionary of {"sheetName": "type"}
         sheet_types = request.json.get('sheets', {})
-        
+
         if not sheet_types:
             return jsonify({"error": "No sheet types provided. Please specify sheet types."}), 400
-            
+
         # Get all xls and xlsx files in the input directory
         excel_files = current_project.files.get("input", [])
         output_dir = current_project.output_dir
@@ -276,48 +284,94 @@ def process_excel():
             return jsonify({"error": "No Excel files found in the project input directory."}), 404
 
         has_error = False
-        
+        results_for_response = {}
+
         # Process all excel files
-        for excel_file in excel_files:
-            result = excel_file_handler.process_sheets(excel_file, output_dir, sheet_types)
-            for sheet in result:
-                if result[sheet]["status"] == "success":
-                    current_project.add_file(result[sheet]["output_path"], "output")
-            
-            if isinstance(result, dict) and "error" in result:
+        for excel_file_data in excel_files:
+            excel_file_path = excel_file_data['path']  # EXTRACT THE PATH HERE!
+            file_name = excel_file_data['name']
+
+            process_result = excel_file_handler.process_sheets(excel_file_path, output_dir, sheet_types) # Use excel_file_path (string)
+            results_for_response[file_name] = process_result
+
+            if isinstance(process_result, dict) and "error" in process_result:
                 has_error = True
-                
+
         # Add processing record to project
         current_project.add_processing_record(
             operation="excel_processing",
-            input_files=excel_files,
+            input_files=[f['path'] for f in excel_files],
             output_files=current_project.files.get("output", []),
             details={"sheet_types": sheet_types}
         )
         current_project.save_metadata()
-        
+
         # Return comprehensive results
         return jsonify({
             "status": "error" if has_error else "success",
             "project_id": current_project.id,
-            "results": current_project.files.get("output", [])
+            "results": results_for_response
         }), 200
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        error_message = f"Error in /process-excel: {str(e)}"
+        print(error_message)
+        return jsonify({"error": error_message}), 500
 
 
 
+# @app.route('/generate-documents', methods=['POST'])
+# def generate_documents():
+#     """Generate documents based on processed data."""
+#     global current_project
+    
+#     if not current_project:
+#         return jsonify({"error": "No active project. Please create or load a project first."}), 400
+    
+#     # Implement document generation logic here
+#     return jsonify({"status": "Not implemented yet"})
 
 @app.route('/generate-documents', methods=['POST'])
 def generate_documents():
     """Generate documents based on processed data."""
     global current_project
-    
+
     if not current_project:
         return jsonify({"error": "No active project. Please create or load a project first."}), 400
-    
-    # Implement document generation logic here
-    return jsonify({"status": "Not implemented yet"})
+
+    try:
+        # 1. Get the processed directory from the current project
+        data_dir = current_project.processed_dir
+        output_dir = current_project.output_dir  # Use project's output dir for generated docs
+
+        # 2. Use the DocumentGenerator to generate documents
+        generated_files = generator.generate(data_dir, output_dir) # Call the generate method
+
+        # 3. Count generated files and get output directory
+        file_count = len(generated_files)
+        output_directory = current_project.output_dir # Get project's output_dir
+
+        # 4. Add document generation record to project history
+        current_project.add_processing_record(
+            operation="document_generation",
+            input_files=[data_dir], # Or list specific input files if you track them
+            output_files=generated_files,
+            details={"generator_model": generator.model} # Add generator model to details
+        )
+        current_project.save_metadata()
+
+
+        # 5. Return success response with file count and output directory
+        return jsonify({
+            "status": "success",
+            "count": file_count,
+            "output_dir": output_directory
+        })
+
+    except Exception as e:
+        error_message = f"Error generating documents: {str(e)}"
+        print(error_message)
+        return jsonify({"error": error_message}), 500
     
 @app.route('/api/class-diagram', methods=['POST'])
 def get_class_diagram():
