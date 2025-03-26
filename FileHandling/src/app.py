@@ -331,80 +331,145 @@ def process_excel():
 #     # Implement document generation logic here
 #     return jsonify({"status": "Not implemented yet"})
 
-@app.route('/generate-documents', methods=['POST'])
-def generate_documents():
-    """Generate documents based on processed data."""
-    global current_project
+@app.route('/generate-text-document', methods=['POST'])
+def generate_text_document():
+    """Generate text document using Gemini API. 
+    input json: None
+    output json: 
+    {
+        "status": "success", 
+        "message": "Document generated successfully", 
+        "name": "generated_document.md",
+    } 
+    """
+    pass
 
-    if not current_project:
-        return jsonify({"error": "No active project. Please create or load a project first."}), 400
-
-    try:
-        # 1. Get the processed directory from the current project
-        data_dir = current_project.processed_dir
-        output_dir = current_project.output_dir  # Use project's output dir for generated docs
-
-        # 2. Use the DocumentGenerator to generate documents
-        generated_files = generator.generate(data_dir, output_dir) # Call the generate method
-
-        # 3. Count generated files and get output directory
-        file_count = len(generated_files)
-        output_directory = current_project.output_dir # Get project's output_dir
-
-        # 4. Add document generation record to project history
-        current_project.add_processing_record(
-            operation="document_generation",
-            input_files=[data_dir], # Or list specific input files if you track them
-            output_files=generated_files,
-            details={"generator_model": generator.model} # Add generator model to details
-        )
-        current_project.save_metadata()
+@app.route('/generate-class-diagram', methods=['POST'])
+def generate_class_diagram():
+    """Generate class diagram using Gemini API. 
+    input json: None
+    output json: 
+    {
+        "status": "success", 
+        "message": "Class diagram generated successfully", 
+        "name": "class_diagram.json",
+    } 
+    """
+    pass
 
 
-        # 5. Return success response with file count and output directory
-        return jsonify({
-            "status": "success",
-            "count": file_count,
-            "output_dir": output_directory
-        })
+@app.route('/generate-usecase-diagram', methods=['POST'])
+def generate_usecase_diagram():
+    """Generate usecase diagram using Gemini API. 
+    input json: None
+    output json: 
+    {
+        "status": "success", 
+        "message": "Usecase diagram generated successfully", 
+        "name": "usecase_diagram.json",
+    } 
+    """
+    pass
+# Create endpoint to database diagram
+@app.route('/generate-database-diagram', methods=['POST'])
+def generate_database_diagram():
+    """Generate database diagram using Gemini API. 
+    input json: None
+    output json: 
+    {
+        "status": "success", 
+        "message": "Database diagram generated successfully", 
+        "name": "database_diagram.json",
+    } 
+    """
+    pass
+@app.route('/generate-preview-app', methods=['POST'])
+def generate_preview_app():
+    """Generate preview app using Gemini API.
+    The generated preview app will be put in the folder preview app in the project directory. 
+    input json: None
+    output json: 
+    {
+        "status": "success", 
+        "message": "Preview app generated successfully",
+    } 
+    """
+    pass
 
-    except Exception as e:
-        error_message = f"Error generating documents: {str(e)}"
-        print(error_message)
-        return jsonify({"error": error_message}), 500
+# @app.route('/generate-documents', methods=['POST'])
+# def generate_documents():
+#     """Generate documents based on processed data."""
+#     global current_project
+
+#     if not current_project:
+#         return jsonify({"error": "No active project. Please create or load a project first."}), 400
+
+#     try:
+#         # 1. Get the processed directory from the current project
+#         data_dir = current_project.processed_dir
+#         output_dir = current_project.output_dir  # Use project's output dir for generated docs
+
+#         # 2. Use the DocumentGenerator to generate documents
+#         generated_files = generator.generate(data_dir, output_dir) # Call the generate method
+
+#         # 3. Count generated files and get output directory
+#         file_count = len(generated_files)
+#         output_directory = current_project.output_dir # Get project's output_dir
+
+#         # 4. Add document generation record to project history
+#         current_project.add_processing_record(
+#             operation="document_generation",
+#             input_files=[data_dir], # Or list specific input files if you track them
+#             output_files=generated_files,
+#             details={"generator_model": generator.model} # Add generator model to details
+#         )
+#         current_project.save_metadata()
+
+
+#         # 5. Return success response with file count and output directory
+#         return jsonify({
+#             "status": "success",
+#             "count": file_count,
+#             "output_dir": output_directory
+#         })
+
+#     except Exception as e:
+#         error_message = f"Error generating documents: {str(e)}"
+#         print(error_message)
+#         return jsonify({"error": error_message}), 500
     
-@app.route('/api/class-diagram', methods=['POST'])
-def get_class_diagram():
-    """API endpoint to generate class diagram data from Gemini."""
-    global current_project
+# @app.route('/class-diagram', methods=['POST'])
+# def get_class_diagram():
+#     """API endpoint to generate class diagram data from Gemini."""
+#     global current_project
     
-    if not current_project:
-        return jsonify({"error": "No active project. Please create or load a project first."}), 400
+#     if not current_project:
+#         return jsonify({"error": "No active project. Please create or load a project first."}), 400
 
-    try:
-        # Use the project's processed directory
-        data_dir = current_project.processed_dir
-        files = generator.scan_data_directory(data_dir)
-        csv_data = generator.read_csv_data(files["csvs"])
+#     try:
+#         # Use the project's processed directory
+#         data_dir = current_project.processed_dir
+#         files = generator.scan_data_directory(data_dir)
+#         csv_data = generator.read_csv_data(files["csvs"])
 
-        if not csv_data:
-            return jsonify({"error": "No CSV data found to generate class diagram."}), 400
+#         if not csv_data:
+#             return jsonify({"error": "No CSV data found to generate class diagram."}), 400
 
-        diagram_data = generator.generate_class_diagram(csv_data)
+#         diagram_data = generator.generate_class_diagram(csv_data)
         
-        # Add processing record to project
-        current_project.add_processing_record(
-            operation="class_diagram_generation",
-            input_files=files["csvs"],
-            output_files=[],
-            details={"diagram_type": "class_diagram"}
-        )
-        current_project.save_metadata()
+#         # Add processing record to project
+#         current_project.add_processing_record(
+#             operation="class_diagram_generation",
+#             input_files=files["csvs"],
+#             output_files=[],
+#             details={"diagram_type": "class_diagram"}
+#         )
+#         current_project.save_metadata()
 
-        return jsonify(diagram_data), 200
+#         return jsonify(diagram_data), 200
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
