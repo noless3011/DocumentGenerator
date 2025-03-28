@@ -47,7 +47,52 @@ class Project:
         """Generate a unique ID based on timestamp."""
         timestamp = int(datetime.datetime.now().timestamp())
         return f"{timestamp:x}"[-6:]  # Use last 6 hex digits of timestamp
-    
+    def get_image_dirs(self) -> List[str]:
+        """Get the list of directories containing images."""
+        return [file["path"] for file in self.files["processed"] if file["path"].endswith(('.png', '.jpg', '.jpeg'))]
+    def get_csv_files(self) -> List[str]:
+        """Get the list of CSV files in the project."""
+        return [file["path"] for file in self.files["processed"] if file["path"].endswith('.csv')]
+    def scan_and_update_files(self) -> None:
+        """Scan the project directories and update the file list."""
+        self.files = {
+            "input": [],
+            "processed": [],
+            "output": []
+        }
+        for directory, type_key in [
+            (self.input_dir, "input"), 
+            (self.processed_dir, "processed"), 
+            (self.output_dir, "output")
+        ]:
+            if os.path.exists(directory):
+                for file in os.listdir(directory):
+                    file_path = os.path.join(directory, file)
+                    if os.path.isfile(file_path):
+                        # Filter files based on their types
+                        file_lower = file.lower()
+                        should_include = False
+                        
+                        if type_key == "input" and (file_lower.endswith('.xls') or file_lower.endswith('.xlsx')):
+                            should_include = True
+                        elif type_key == "processed" and (file_lower.endswith('.png') or 
+                                                        file_lower.endswith('.jpeg') or 
+                                                        file_lower.endswith('.jpg')):
+                            should_include = True
+                        elif type_key == "output" and (file_lower.endswith('.html') or 
+                                                     file_lower.endswith('.json') or 
+                                                     file_lower.endswith('.md')):
+                            should_include = True
+                            
+                        if should_include:
+                            self.files[type_key].append({
+                                "path": file_path,
+                                "name": file,
+                                "added_date": datetime.datetime.now().isoformat()
+                            })
+                            
+        self.modified_date = datetime.datetime.now()
+
     def create_directory_structure(self) -> bool:
         """Create the project directory structure."""
         try:
