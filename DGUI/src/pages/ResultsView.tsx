@@ -3,16 +3,22 @@ import Markdown from 'react-markdown';
 import DiagramView from './DiagramView';
 import MarkdownView from './MarkdownView';
 import ImageView from './ImageView';
+import PreviewAppView from '../components/PreviewApp/PreviewAppView';
 import { Project } from 'src/components/DocumentsHandling/ProjectManagingMenu';
 
 interface TabProps {
     title: string;
     dir: string;
-    type: 'Image' | 'Markdown' | 'Diagram';
+    type: 'Image' | 'Markdown' | 'Diagram' | 'PreviewApp';
 }
 
 interface ResultsViewProps {
     project: Project | null;
+}
+
+interface PreviewAppViewProps {
+    project: Project;
+    fileDir: string;
 }
 
 const ResultsView: React.FC<ResultsViewProps> = ({ project }) => {
@@ -58,6 +64,15 @@ const ResultsView: React.FC<ResultsViewProps> = ({ project }) => {
                 if (files?.json) {
                     files.json.forEach((file) => {
                         newTabs.push({ title: file, dir: `output/${file}`, type: 'Diagram' });
+                    });
+                }
+
+                // Add a Preview App option if there are images
+                if (files?.image && files.image.length > 0) {
+                    newTabs.push({ 
+                        title: 'Preview App', 
+                        dir: `output`, // Pass the output directory
+                        type: 'PreviewApp' 
                     });
                 }
                 
@@ -107,6 +122,11 @@ const ResultsView: React.FC<ResultsViewProps> = ({ project }) => {
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                                             </svg>
                                         )}
+                                        {tab.type === 'PreviewApp' && (
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                            </svg>
+                                        )}
                                     </span>
                                     {tab.title}
                                 </button>
@@ -130,6 +150,9 @@ const ResultsView: React.FC<ResultsViewProps> = ({ project }) => {
                                             return <MarkdownView key={selectedTabIndex} fileDir={`${projectDir}/${selectedTab.dir}`} />;
                                         case 'Diagram':
                                             return <DiagramView key={selectedTabIndex} fileDir={`${projectDir}/${selectedTab.dir}`} />;
+                                        case 'PreviewApp':
+                                            console.log(`Loading PreviewApp with project: ${project.id}`);
+                                            return <PreviewAppView key={selectedTabIndex} project={project} />;
                                         default:
                                             return <div key={selectedTabIndex}>Invalid file type</div>;
                                     }
