@@ -7,13 +7,11 @@ export const preloadConfig: Configuration = {
   },
   resolve: {
     extensions: ['.js', '.ts', '.jsx', '.tsx', '.css', '.json'],
+    fallback: {
+        "fs": require.resolve("fs"),
+        "util": require.resolve("util/")
+    }
   },
-  // Set the target to 'electron-preload'
-  target: 'electron-preload',
-  // Mark Node.js built-in modules as external
-  externals: {
-    'fs': 'commonjs fs',
-    'path': 'commonjs path',
-    'electron': 'commonjs electron'
-  }
+  // Critical change - set to 'electron-preload' instead of using node preset
+  target: 'node'
 };
