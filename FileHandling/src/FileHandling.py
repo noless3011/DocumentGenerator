@@ -10,7 +10,7 @@ from flask_cors import CORS
 import pythoncom
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
-from DocumentGeneration import DocumentGenerator
+from agents.DocumentGeneration import DocumentGenerator
 
 app = Flask(__name__)
 CORS(app)

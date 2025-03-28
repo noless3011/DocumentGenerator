@@ -5,6 +5,8 @@ import os
 import pandas as pd
 import json
 from typing import List, Dict, Any
+from agents.TextDocumentAgent import TextDocumentAgent
+
 
 class DocumentGenerator:
     def __init__(self, api_key=None, model="gemini/gemini-2.0-flash"):
@@ -16,6 +18,7 @@ class DocumentGenerator:
             
         self.model = model
         litellm.set_verbose = False
+        self.text_generator = TextDocumentAgent(model)
         
     def scan_data_directory(self, data_dir: str) -> Dict[str, List[Path]]:
         """Scan the data directory for images and CSV files."""
@@ -61,52 +64,6 @@ class DocumentGenerator:
                 
         return image_data
     
-    def generate_document(self, image_data: Dict[str, str], csv_data: Dict[str, Any]) -> str:
-        """Generate a document using Gemini API with both image and CSV data."""
-        # Prepare the prompt with CSV data
-        csv_description = json.dumps(csv_data, indent=2)
-        
-        # Prepare messages array with text and images
-        messages = [
-            {
-                "role": "user", 
-                "content": [
-                    {
-                        "type": "text", 
-                        "text": f"""Please create a detailed document that describes the program based on the following UI screenshots and feature data.
-                        
-The CSV data contains information about the program features:
-{csv_description}
-
-Based on both the UI screenshots and the feature data, please:
-1. Identify the purpose of the application
-2. Describe the main features and functionality
-3. Explain the user interface components
-4. Provide a concise summary of how the application works
-5. Format your response as a professional document with clear sections
-
-Please be detailed and thorough in your analysis."""
-                    }
-                ]
-            }
-        ]
-        
-        # Add image content to the first message
-        for image_name, encoded_image in image_data.items():
-            messages[0]["content"].append({
-                "type": "image_url",
-                "image_url": f"data:image/png;base64,{encoded_image}"
-            })
-        
-        # Make API call to Gemini
-        try:
-            response = litellm.completion(
-                model=self.model,
-                messages=messages
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            return f"Error generating document: {str(e)}"
     
     def save_document(self, content: str, output_file: str) -> None:
         """Save the generated document to a file."""
@@ -155,7 +112,7 @@ Please be detailed and thorough in your analysis."""
         image_data = self.prepare_images(files["images"])
         
         # Generate main document
-        document_content = self.generate_document(image_data, csv_data)
+        document_content = self.text_generator.generate_document(image_data, csv_data)
         
         # Set up output directory
         output_dir = Path(output_dir)
@@ -202,63 +159,78 @@ Please be detailed and thorough in your analysis."""
         return generated_files
         
     def generate_class_diagram(self, csv_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate class diagram representation in JSON format with improved structure."""
+        """Generate class diagram representation in JSON format using Gemini API."""
 
-        # --- Placeholder Logic - Replace with your actual diagram generation logic ---
-        # This is just an example to demonstrate the output structure.
-        # You need to extract class, attribute, method, and relationship information
-        # from your `csv_data` or other data source and structure it as shown below.
+        # Prepare the prompt with CSV data
+        csv_description = json.dumps(csv_data, indent=2)
 
-        entities_data: List[Dict[str, Any]] = []
-        associations_data: List[Dict[str, Any]] = []
-
-        # Example hardcoded data for demonstration - REPLACE THIS with your logic!
-        entities_data = [
+        # Prepare messages array with text prompt
+        messages = [
             {
-                "id": "class1",
-                "name": "Person",
-                "properties": [
-                    {"visibility": "private", "name": "name", "type": "string"},
-                    {"visibility": "public", "name": "age", "type": "number"}
-                ],
-                "methods": [
-                    {"visibility": "public", "name": "getName", "returnType": "string", "parameters": []}
-                ]
-            },
-            {
-                "id": "class2",
-                "name": "Employee",
-                "properties": [
-                    {"visibility": "private", "name": "employeeId", "type": "string"}
-                ],
-                "methods": [
-                    {"visibility": "public", "name": "getEmployeeId", "returnType": "string", "parameters": []}
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"""
+                        Analyze the provided feature data (in CSV format, described in JSON) and generate a class diagram in JSON format.
+
+                        The JSON output should be structured as follows:
+                        {{
+                          "classes": [
+                            {{ "name": "ClassName", "properties": ["propertyName: propertyType", ...], "methods": ["methodName(): returnType", ... ] }},
+                            ...
+                          ],
+                          "relationships": [
+                            {{ "from": "ClassName1", "to": "ClassName2", "type": "RelationshipType" }},
+                            ...
+                          ]
+                        }}
+
+                        Identify the key classes, their properties, methods, and relationships based on the feature data.
+                        Return ONLY the JSON object in your response, without any extra text or explanations.
+
+                        Here is the feature data in CSV format (described in JSON):
+                        {csv_description}
+                        """
+                    }
                 ]
             }
         ]
 
-        associations_data = [
-            {
-                "from": "class2",  # Employee
-                "to": "class1",    # Person
-                "type": "Inheritance"
-            },
-            {
-                "from": "class1",  # Person
-                "to": "class2",    # Employee
-                "type": "Association" # Just for example
+        # Make API call to Gemini for class diagram data
+        try:
+            response = litellm.completion(
+                model=self.model,
+                messages=messages,
+                temperature=0.3 # Keep temperature low for more consistent JSON output
+            )
+            gemini_response_content = response.choices[0].message.content
+            print("Gemini API Response (Class Diagram):\n", gemini_response_content) # Debugging
+
+            try:
+                # Attempt to parse Gemini's response as JSON
+                class_diagram_json_data = json.loads(gemini_response_content)
+            except json.JSONDecodeError as e:
+                print(f"Warning: Gemini did not return valid JSON. JSONDecodeError: {e}")
+                print("Gemini Response Content:\n", gemini_response_content) # Print full response for debugging
+                class_diagram_json_data = {
+                    "type": "class_diagram",
+                    "entities": [],
+                    "associations": [],
+                    "error": "Gemini returned invalid JSON. See server logs for raw response." # Indicate error in JSON
+                }
+
+
+        except Exception as gemini_e:
+            print(f"Error generating class diagram data from Gemini: {str(gemini_e)}")
+            class_diagram_json_data = {
+                "type": "class_diagram",
+                "entities": [],
+                "associations": [],
+                "error": f"Error generating class diagram from Gemini: {str(gemini_e)}" # Indicate error in JSON
             }
-        ]
-        # --- End of Placeholder Logic ---
 
-
-        diagram_json = {
-            "type": "class_diagram", # Optional, but good to indicate diagram type
-            "entities": entities_data,
-            "associations": associations_data
-        }
-
-        return diagram_json
+        return class_diagram_json_data
         
     def generate_database_diagram(self, csv_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate database diagram representation in JSON format."""

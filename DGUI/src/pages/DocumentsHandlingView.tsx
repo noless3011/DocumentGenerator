@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Project } from 'src/components/DocumentsHandling/ProjectManagingMenu';
 import * as XLSX from 'xlsx';
 
 interface SheetOption {
@@ -10,17 +11,15 @@ interface SheetOption {
 
 interface DocumentsHandlingProps {
     switchTab: (tabIndex: number) => void;
-    setFileDirs: (fileDirs: string[]) => void;
+    project: Project;
 }
 
-const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFileDirs }) => {
+const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, project }) => {
     const [fileName, setFileName] = useState<string>('');
-    const [outputFolder, setOutputFolder] = useState<string>('');
     const [sheets, setSheets] = useState<SheetOption[]>([]);
     const [previewData, setPreviewData] = useState<any[][]>([]);
     const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
     const [currentPreviewSheet, setCurrentPreviewSheet] = useState<string>('');
-    const [fileId, setFileId] = useState<string>(''); // To store the uploaded file ID
     const [processing, setProcessing] = useState<boolean>(false);
     const [processingResults, setProcessingResults] = useState<any>(null);
     const [generating, setGenerating] = useState<boolean>(false);
@@ -31,23 +30,26 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
         const file = event.target.files?.[0];
         if (!file) return;
 
+        if (!project) {
+            alert('Please load or create a project first.');
+            return;
+        }
+
         setFileName(file.name);
-        setSheets([]); // Clear previous sheets
-        setPreviewData([]); // Clear preview data
-        setPreviewHeaders([]); // Clear preview headers
-        setProcessingResults(null); // Clear processing results
-        setFileId(''); // Clear previous fileId
+        setSheets([]);
+        setPreviewData([]);
+        setPreviewHeaders([]);
+        setProcessingResults(null);
 
         try {
-            // Create form data for file upload
             const formData = new FormData();
             formData.append('file', file);
 
-            // Upload file to backend
             const uploadResponse = await fetch('http://localhost:5000/upload-excel', {
                 method: 'POST',
                 body: formData,
-                mode: 'cors'
+                mode: 'cors',
+                credentials: 'include',
             });
 
             if (!uploadResponse.ok) {
@@ -57,13 +59,10 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
 
             const uploadResult = await uploadResponse.json();
 
-            // Store the file ID for later use
-            setFileId(uploadResult.file_id);
-
-            // Get sheet names from the uploaded file
-            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets/${uploadResult.file_id}`, {
-                method: 'GET',
-                mode: 'cors'
+            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
+                method: 'POST',
+                mode: 'cors',
+                credentials: 'include'
             });
 
             if (!sheetsResponse.ok) {
@@ -73,37 +72,35 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
 
             const sheetsResult = await sheetsResponse.json();
 
-            // Map sheet names to sheet options
             const sheetOptions: SheetOption[] = sheetsResult.sheets.map((name: string) => ({
                 name,
                 selected: true,
-                options: ['UI', 'Table'], // Removed Diagram and Others as per backend options
+                options: ['UI', 'Table'],
                 selectedOption: 'UI'
             }));
 
             setSheets(sheetOptions);
 
-            // Preview the first sheet if available
             if (sheetOptions.length > 0) {
                 setCurrentPreviewSheet(sheetOptions[0].name);
-                // No need to handle preview logic immediately here, let user click preview button
             }
             alert('File uploaded and sheets loaded successfully!');
-
+            if (project) {
+                project.base_dir = uploadResult.output_folder;
+            }
 
         } catch (error) {
             console.error('Error handling file:', error);
             alert(error instanceof Error ? error.message : 'An unknown error occurred during file upload.');
-            setFileName(''); // Reset file name on error
-            setSheets([]); // Clear sheets on error
-            setFileId(''); // Clear fileId on error
+            setFileName('');
+            setSheets([]);
         }
     };
 
     const handlePreviewSheet = async (sheetName: string) => {
         try {
-            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets/${fileId}`, {
-                method: 'GET',
+            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
+                method: 'POST',
                 mode: 'cors'
             });
 
@@ -113,8 +110,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
             }
             const sheetsResult = await sheetsResponse.json();
 
-            // Simulate reading sheet data from backend (replace with actual API if needed for preview data)
-            // For now, re-parse the file on frontend for preview (efficient for small previews)
             const fileInput = fileInputRef.current?.files?.[0];
             if (!fileInput) return;
 
@@ -122,7 +117,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
             reader.onload = (e) => {
                 const binaryString = e.target?.result;
                 const workbook = XLSX.read(binaryString, { type: 'binary' });
-                workbookRef.current = workbook; // Store workbook for later use
+                workbookRef.current = workbook;
 
                 const worksheet = workbook.Sheets[sheetName];
 
@@ -130,16 +125,15 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                     const jsonData = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1, defval: '' });
 
                     if (jsonData.length > 0) {
-                        // First row as headers
                         const headers = (jsonData[0] as any[]).map(h => h?.toString() || '');
-                        const rows = jsonData.slice(1, 21); // Preview up to 20 rows
+                        const rows = jsonData.slice(1, 21);
 
                         setPreviewHeaders(headers);
                         setPreviewData(rows);
                         setCurrentPreviewSheet(sheetName);
                     } else {
                         setPreviewHeaders([]);
-                        setPreviewData([[]]); // Show empty table if no data
+                        setPreviewData([[]]);
                         setCurrentPreviewSheet(sheetName);
                         alert(`Sheet "${sheetName}" is empty.`);
                     }
@@ -161,12 +155,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
     };
 
 
-    const handleOutputFolderSelect = () => {
-        window.myAPI.selectFolder().then((folderPath) => {
-            setOutputFolder(folderPath);
-        })
-    };
-
     const handleSheetSelectionChange = (index: number) => {
         const updatedSheets = [...sheets];
         updatedSheets[index].selected = !updatedSheets[index].selected;
@@ -180,10 +168,11 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
     };
 
     const handleProcessSheets = async () => {
-        if (!fileId) {
-            alert('Please upload an Excel file first.');
+        if (!project) {
+            alert('Please create/load a project first.');
             return;
         }
+
 
         const selectedSheetTypes = sheets.reduce((acc, sheet) => {
             if (sheet.selected) {
@@ -198,13 +187,12 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
         }
 
         const payload = {
-            file_id: fileId,
             sheets: selectedSheetTypes
         };
 
         try {
             setProcessing(true);
-            setProcessingResults(null); // Clear previous results
+            setProcessingResults(null);
 
             const response = await fetch('http://localhost:5000/process-excel', {
                 method: 'POST',
@@ -234,6 +222,10 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
     };
 
     const handleGenerateDocuments = async () => {
+        if (!project) {
+            alert('Please load or create a project first.');
+        }
+
         try {
             setGenerating(true);
             const response = await fetch('http://localhost:5000/generate-documents', {
@@ -241,9 +233,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    ...(outputFolder && { output_dir: outputFolder })
-                }),
                 mode: 'cors'
             });
 
@@ -254,12 +243,11 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
 
 
             const result = await response.json();
+            console.log("Generate Documents Result:", result);
 
-            if (result.generated_files && Array.isArray(result.generated_files)) {
-                setFileDirs(result.generated_files);
-            }
-            alert(`Documents generated successfully! ${result.count} file(s) created in ${result.output_dir}`);
-            switchTab(1); // Switch to the Results tab
+            // alert(`Documents generated successfully! ${result.count} file(s) created in ${result.output_dir}`);
+            alert('Documents generated successfully!'); 
+            switchTab(1);
         } catch (error) {
             console.error('Error generating documents:', error);
             alert('Failed to generate documents. Check console for details.');
@@ -273,7 +261,6 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
             {/* Left Panel - Controls */}
             <div className="w-full md:w-1/3 p-4 bg-gray-100 border-r border-gray-200 flex flex-col">
                 <h2 className="panel-title text-xl font-semibold mb-4">Excel File Handler</h2>
-
                 {/* File Uploader */}
                 <div className="upload-container mb-6">
                     <p className="section-label text-sm font-medium text-gray-700 mb-2">Upload Excel File</p>
@@ -289,6 +276,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             className="primary-button bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                            disabled={!project}
                         >
                             Select File
                         </button>
@@ -296,25 +284,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                             {fileName || 'No file selected'}
                         </span>
                     </div>
-                </div>
-
-                {/* Output Folder Selector */}
-                <div className="folder-container mb-6">
-                    <p className="section-label text-sm font-medium text-gray-700 mb-2">Output Folder for Document Generation</p>
-                    <div className="button-row flex items-center space-x-2">
-                        <button
-                            onClick={handleOutputFolderSelect}
-                            className="primary-button bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                        >
-                            Select Folder
-                        </button>
-                        <span className="folder-path text-gray-600 text-sm truncate">
-                            {outputFolder || 'No folder selected'}
-                        </span>
-                    </div>
-                    <p className="text-gray-500 text-xs italic mt-1">
-                        Choose where to save generated documents
-                    </p>
+                    {!project && <p className="text-red-500 text-xs italic mt-1">Please load/create first to upload file.</p>}
                 </div>
 
                 {/* Sheet List with Options */}
@@ -370,7 +340,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                             <button
                                 className="process-button mt-4 bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
                                 onClick={handleProcessSheets}
-                                disabled={processing}
+                                disabled={processing || !project}
                             >
                                 {processing ? 'Processing...' : 'Process Selected Sheets'}
                             </button>
@@ -378,10 +348,11 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                             <button
                                 className="process-button mt-4 bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
                                 onClick={handleGenerateDocuments}
-                                disabled={generating}
+                                disabled={generating || !project}
                             >
                                 {generating ? 'Asking LLM...' : 'Generate Documents'}
                             </button>
+                            {!project && <p className="text-red-500 text-xs italic mt-1">Please start a session first to process or generate documents.</p>}
                         </div>
                     )}
                 </div>
@@ -429,12 +400,23 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, setFil
                 {processingResults && (
                     <div className="processing-results mt-6">
                         <h3 className="text-lg font-semibold mb-2">Processing Results</h3>
+                        <p>Project ID: {processingResults.project_id}</p>
+                        <p>Status: {processingResults.status}</p>
                         <ul className="list-disc pl-5">
-                            {Object.entries(processingResults).map(([sheetName, result]) => (
-                                <li key={sheetName} className="mb-1">
-                                    <strong className="font-medium">{sheetName}:</strong> <span className="text-sm">{(result as any).status === 'success'
-                                        ? `Processed as ${(result as any).type}, output in: ${(result as any).output_folder}` // Changed to output_folder as per API
-                                        : `Error: ${(result as any).message}`}</span>
+                            {Object.entries(processingResults.results).map(([fileName, fileResults]) => (
+                                <li key={fileName} className="mb-2">
+                                    <strong className="font-medium">{fileName}:</strong>
+                                    <ul>
+                                        {Object.entries(fileResults).map(([sheetName, sheetResult]) => (
+                                            <li key={sheetName}>
+                                                <strong className="font-medium ml-4">{sheetName}:</strong> <span className="text-sm">
+                                                    {sheetResult.status === 'success'
+                                                        ? `Processed as ${sheetResult.type}, output in: ${sheetResult.output_path}`
+                                                        : `Error: ${sheetResult.message}`}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </li>
                             ))}
                         </ul>

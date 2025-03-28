@@ -6,6 +6,8 @@ import fs from 'fs/promises';
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 import {dialog, ipcMain} from 'electron'
+import { Project } from './components/DocumentsHandling/ProjectManagingMenu';
+const path = require('path');
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();
@@ -34,7 +36,7 @@ const createWindow = (): void => {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
-          'Content-Security-Policy': ["default-src 'self'; connect-src 'self' http://localhost:5000; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"],
+          'Content-Security-Policy': ["default-src 'self'; connect-src 'self' http://localhost:5000; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' http://localhost:5000;"],
         }
       });
     }
@@ -72,6 +74,25 @@ const createWindow = (): void => {
     }
     catch (error) {
       return `Error saving file: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  });
+  ipcMain.handle('view:processedFileFromProject', async (_, project:Project) => {
+    try {
+      // Read the project directory and return a dict with 3 types of files: markdown, image, json 
+      const projectDir = project.project_dir || `${project.base_dir}/${project.name}_${project.id}`;
+      // Change this from processed to output
+      const outputDir = path.join(projectDir, 'output');
+      console.log('Looking for files in:', outputDir);
+      const files = await fs.readdir(outputDir);
+      const result = {
+        markdown: files.filter(file => file.endsWith('.md')),
+        image: files.filter(file => file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg')),
+        json: files.filter(file => file.endsWith('.json'))
+      }
+      return result;
+    } catch (error) {
+      console.error('Error reading project files:', error);
+      return `Error reading project files: ${error instanceof Error ? error.message : String(error)}`;
     }
   });
 };

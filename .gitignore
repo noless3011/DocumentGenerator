@@ -317,3 +317,4 @@ output/**
 DGUI/outputs/**
 FileHandling/output/**
 FileHandling/uploads/**
+FileHandling/experiments/**
