@@ -319,3 +319,4 @@ FileHandling/output/**
 FileHandling/uploads/**
 FileHandling/experiments/**
 project_registry.json
+FileHandling/projects_registry.json

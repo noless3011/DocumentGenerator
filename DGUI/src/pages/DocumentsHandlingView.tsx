@@ -228,7 +228,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
 
         try {
             setGenerating(true);
-            const response = await fetch('http://localhost:5000/generate-documents', {
+            const response = await fetch('http://localhost:5000/generate-all-documents', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -246,7 +246,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
             console.log("Generate Documents Result:", result);
 
             // alert(`Documents generated successfully! ${result.count} file(s) created in ${result.output_dir}`);
-            alert('Documents generated successfully!'); 
+            alert('Documents generated successfully!');
             switchTab(1);
         } catch (error) {
             console.error('Error generating documents:', error);

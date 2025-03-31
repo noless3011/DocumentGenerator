@@ -8,7 +8,8 @@ export interface IMyAPI {
   getProcessedFilesFromProject: (project: Project) => Promise<{
     markdown: string[],
     image: string[],
-    json: string[]
+    json: string[],
+    html: string[],
   }>
 }
 

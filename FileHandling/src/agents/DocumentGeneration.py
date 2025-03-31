@@ -7,8 +7,10 @@ import json
 from typing import List, Dict, Any
 from utils.Message import Message
 from utils.Project import Project
+from agents.IAgent import IAgent
 from agents.TextDocumentAgent import TextDocumentAgent
 from agents.ClassDiagramAgent import ClassDiagramAgent
+from agents.PrototypeAgent import PrototypeAgent
 from flask import current_app
 
 class GeneralAgent:
@@ -20,10 +22,10 @@ class GeneralAgent:
             raise ValueError("Gemini API key must be provided or set as an environment variable")
         self.project = project
         self.model = model
-        litellm.set_verbose = False
-        self.text_generator = TextDocumentAgent(model)
-        # self.prototype_generator = PrototypeAgent(model)
-        self.class_diagram_agent = ClassDiagramAgent(model) 
+        self.agents = [IAgent] # type: List[IAgent]
+        self.agents.append(TextDocumentAgent(model))
+        self.agents.append(PrototypeAgent(model))
+        self.agents.append(ClassDiagramAgent(model))
         self.init_message = Message()
 
     def change_project(self, project: Project):
@@ -61,7 +63,7 @@ class GeneralAgent:
             except Exception as e:
                 print(f"Error reading image file: {e}")
         # Add the CSV files from the project
-        csv_files = self.project.get_csv_files()
+        csv_files = self.project.get_csv_dirs()
         for csv_file in csv_files:
             csv_path = self.project.get_csv_path(csv_file)
             csv_data = pd.read_csv(csv_path)
@@ -97,16 +99,37 @@ class GeneralAgent:
         
         print(f"JSON saved to {output_path}")
         
+    def save_html(self, content: str, output_file: str) -> None:
+        """Save the generated HTML to a file."""
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            try:
+                f.write(content)
+            except Exception as e:
+                #print err with traceback
+                current_app.logger.error(f"Error writing to file: {e}")
+                
+        print(f"HTML saved to {output_path}")
+    
     def generate_text_document(self):
         """Generate a text document."""
-        return self.text_generator.generate_document(self.init_message)
+        for agent in self.agents:
+            if isinstance(agent, TextDocumentAgent):
+                return agent.generate(self.init_message)
     def generate_prototype(self):
         """Generate a prototype."""
-        return self.prototype_generator.generate_html(self.project, self.init_message)
+        for agent in self.agents:
+            if isinstance(agent, PrototypeAgent):
+                return agent.generate(self.init_message)
     
     def generate_class_diagram(self):
         """Generate a class diagram."""
-        return self.class_diagram_agent.generate_class_diagram(self.init_message)
+        for agent in self.agents:
+            if isinstance(agent, ClassDiagramAgent):
+                return agent.generate(self.init_message)
+    
         
         
 

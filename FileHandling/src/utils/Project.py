@@ -47,10 +47,16 @@ class Project:
         """Generate a unique ID based on timestamp."""
         timestamp = int(datetime.datetime.now().timestamp())
         return f"{timestamp:x}"[-6:]  # Use last 6 hex digits of timestamp
+    def get_preview_html_dir(self)->str:
+        for file in self.files["processed"]:
+            if file["path"].endswith('.html'):
+                return file["path"]
+        return None
+
     def get_image_dirs(self) -> List[str]:
         """Get the list of directories containing images."""
         return [file["path"] for file in self.files["processed"] if file["path"].endswith(('.png', '.jpg', '.jpeg'))]
-    def get_csv_files(self) -> List[str]:
+    def get_csv_dirs(self) -> List[str]:
         """Get the list of CSV files in the project."""
         return [file["path"] for file in self.files["processed"] if file["path"].endswith('.csv')]
     def scan_and_update_files(self) -> None:

@@ -3,11 +3,12 @@ import json
 from typing import List, Dict, Any
 from utils.Message import Message
 from flask import current_app
-class TextDocumentAgent:
-    def __init__(self, model):
+from agents.IAgent import IAgent
+class TextDocumentAgent(IAgent):
+    def __init__(self, model:str):
         self.model = model
 
-    def generate_document(self, message: Message) -> str:
+    def generate(self, message: Message) -> str:
         """Generate a document using Gemini API with both image and CSV data."""
         message.add_user_text("From the csv files, images about the UI, create a general specification about the program.")
         response = litellm.completion(

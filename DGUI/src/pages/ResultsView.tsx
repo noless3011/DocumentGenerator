@@ -36,31 +36,31 @@ const ResultsView: React.FC<ResultsViewProps> = ({ project }) => {
             if (!project) return;
             setLoading(true);
             setError(null); // Reset error state at the beginning
-            
+
             try {
                 // Check if window.myAPI exists first
                 if (!window.myAPI) {
                     throw new Error('myAPI is not available. This could indicate the preload script is not loaded correctly.');
                 }
-                
+
                 const files = await window.myAPI.getProcessedFilesFromProject(project);
                 console.log('Received files:', files);
-                
+
                 const newTabs: TabProps[] = [];
-                
+
                 // Make sure we don't double-add markdown files
                 if (files?.markdown) {
                     files.markdown.forEach((file) => {
                         newTabs.push({ title: file, dir: `output/${file}`, type: 'Markdown' });
                     });
                 }
-                
+
                 if (files?.image) {
                     files.image.forEach((file) => {
                         newTabs.push({ title: file, dir: `output/${file}`, type: 'Image' });
                     });
                 }
-                
+
                 if (files?.json) {
                     files.json.forEach((file) => {
                         newTabs.push({ title: file, dir: `output/${file}`, type: 'Diagram' });
@@ -68,14 +68,14 @@ const ResultsView: React.FC<ResultsViewProps> = ({ project }) => {
                 }
 
                 // Add a Preview App option if there are images
-                if (files?.image && files.image.length > 0) {
-                    newTabs.push({ 
-                        title: 'Preview App', 
+                if (files?.html) {
+                    newTabs.push({
+                        title: 'Preview App',
                         dir: `output`, // Pass the output directory
-                        type: 'PreviewApp' 
+                        type: 'PreviewApp'
                     });
                 }
-                
+
                 setTabs(newTabs);
             } catch (error) {
                 console.error('Error fetching project files:', error);

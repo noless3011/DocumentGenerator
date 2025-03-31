@@ -13,31 +13,31 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ project }) => {
     useEffect(() => {
         const loadPreviewApp = async () => {
             if (!project) return;
-            
+
             setLoading(true);
             setError(null);
-            
+
             try {
                 // First check if preview already exists
-                const response = await fetch(`http://localhost:5000/preview/${project.id}`, {
+                const response = await fetch(`http://localhost:5000/preview`, {
                     method: 'GET',
                     headers: {
                         'Accept': 'text/html',
                     },
                 });
-                
+
                 if (response.ok) {
                     // Preview exists, use it
-                    setPreviewUrl(`http://localhost:5000/preview/${project.id}`);
+                    setPreviewUrl(`http://localhost:5000/preview`);
                     setLoading(false);
                     return;
                 }
-                
+
                 // If preview doesn't exist, generate one
                 console.log("Preview app not found, generating a new one...");
-                
+
                 // Make request to generate preview app
-                const generateResponse = await fetch('http://localhost:5000/api/generate-preview-app', {
+                const generateResponse = await fetch('http://localhost:5000/generate-preview-app', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -46,17 +46,17 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ project }) => {
                         projectDir: `${project.project_dir}/output`
                     }),
                 });
-                
+
                 if (!generateResponse.ok) {
                     throw new Error(`Failed to generate preview app: ${generateResponse.statusText}`);
                 }
-                
+
                 // Generation succeeded, now load the preview
                 await new Promise(resolve => setTimeout(resolve, 500)); // Small delay to ensure file is ready
-                
+
                 // Now try to load the preview again
-                setPreviewUrl(`http://localhost:5000/preview/${project.id}`);
-                
+                setPreviewUrl(`http://localhost:5000/preview`);
+
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load preview app');
                 console.error('Error with preview app:', err);

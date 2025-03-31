@@ -87,7 +87,8 @@ const createWindow = (): void => {
       const result = {
         markdown: files.filter(file => file.endsWith('.md')),
         image: files.filter(file => file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg')),
-        json: files.filter(file => file.endsWith('.json'))
+        json: files.filter(file => file.endsWith('.json')),
+        html: files.filter(file => file.endsWith('.html')),
       }
       return result;
     } catch (error) {

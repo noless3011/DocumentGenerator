@@ -3,14 +3,14 @@ import json
 from typing import List, Dict, Any
 from utils.Message import Message
 from flask import current_app
+from agents.IAgent import IAgent
 
-# filepath: d:\ProgrammingProjects\Javascript\DocumentGenerator\FileHandling\src\agents\ClassDiagramAgent.py
 # TODO: Implement the ClassDiagramAgent class with structured input/output
-class ClassDiagramAgent:
+class ClassDiagramAgent(IAgent):
     def __init__(self, model):
         self.model = model
 
-    def generate_class_diagram(self, message: Message) -> Dict[str, Any]:
+    def generate(self, message: Message) -> Dict[str, Any]:
         """Generate a class diagram in JSON format using LLM with code/data files."""
         message.add_user_text("Based on the provided code files and data, create a class diagram. Output the result in JSON format with classes, attributes, methods, and relationships.")
         
