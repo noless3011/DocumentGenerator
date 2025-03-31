@@ -5,6 +5,8 @@ import time
 import csv
 import io
 import uuid
+import litellm
+import base64
 from PIL import ImageGrab
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -14,13 +16,36 @@ from dotenv import load_dotenv
 from agents.DocumentGeneration import GeneralAgent
 from utils.ExcelFileHandler import ExcelFileHandler
 from utils.Project import Project
+from pathlib import Path
+from flask import send_from_directory
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 app.secret_key = os.urandom(24)  # Secret key for session management
 
 @app.after_request
 def add_csp_header(response):
-    response.headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline' data:; connect-src 'self' http://localhost:5000"
+    print(f"Applying CSP header for request path: {request.path}") 
+    csp = (
+        "default-src 'self' data:; "  # Base policy: self and data URIs
+        # Explicitly define script-src allowing self, inline, and eval
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'unsafe-hashes'; "
+        # Allow inline styles (often needed with inline scripts)
+        "style-src 'self' 'unsafe-inline'; " 
+        # Allow connections back to self and the backend itself (if needed by scripts)
+        "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 file://*; " 
+        # Allow Electron to frame this content, and potentially allow self-framing
+        "frame-src 'self' http://localhost:5000; " 
+        # Allow images from self and data URIs (add other sources if needed)
+        "img-src 'self' data: blob:; form-action 'self';" 
+        # IMPORTANT: Remove frame-ancestors if you rely on frame-src, or set it correctly.
+        # If you want Electron (file:// or self) to frame it:
+        # "frame-ancestors 'self';" # 'self' might cover file:// in Electron
+        # Or be more specific if needed. Let's rely on frame-src for now.
+    )
+    print(f"Setting CSP: {csp}")
+    response.headers['Content-Security-Policy'] = csp
+    # Ensure CORS headers aren't overwritten if needed elsewhere, CORS() usually handles this
+    # response.headers.add('Access-Control-Allow-Origin', '*') 
     return response
 
 # Configuration for file uploads and outputs
@@ -144,6 +169,8 @@ def load_project(project_id):
                         "project_name": project.name,
                         "project_dir": project.project_dir
                     })
+                    
+                    return jsonify(response_data)
     
     # If we get here, the project was in registry but files weren't found
     return jsonify({"error": "Project files not found"}), 404
@@ -474,18 +501,257 @@ def generate_database_diagram():
     } 
     """
     pass
-@app.route('/generate-preview-app', methods=['POST'])
+@app.route('/api/generate-preview-app', methods=['POST'])
 def generate_preview_app():
-    """Generate preview app using Gemini API.
-    The generated preview app will be put in the folder preview app in the project directory. 
-    input json: None
-    output json: 
-    {
-        "status": "success", 
-        "message": "Preview app generated successfully",
-    } 
-    """
-    pass
+    """Generate a preview app from processed images using Gemini API."""
+    global current_project
+    
+    if not current_project:
+        return jsonify({"error": "No active project. Please create or load a project first."}), 400
+
+    try:
+        # Get project directory from request
+        data = request.json
+        project_dir = data.get('projectDir')
+        
+        if not project_dir:
+            return jsonify({"error": "Project directory not provided."}), 400
+        
+        # Debug: Print the directory being searched
+        print(f"Looking for images in: {project_dir}")
+        
+        # Find all images in the project - first check output dir, then try other locations
+        image_dirs = [
+            Path(os.path.join(project_dir, "output")),  # Try output directory first
+            Path(project_dir),                          # Then try project root
+            Path(os.path.join(project_dir, "processed")), # Try processed directory
+            Path(os.path.join(project_dir, "images"))   # Try images directory
+        ]
+        
+        # Find images in all potential directories
+        image_files = []
+        for image_dir in image_dirs:
+            if image_dir.exists():
+                print(f"Checking directory: {image_dir}")
+                for ext in ['png', 'jpg', 'jpeg']:
+                    found_images = list(image_dir.glob(f"**/*.{ext}"))
+                    print(f"Found {len(found_images)} {ext} files in {image_dir}")
+                    image_files.extend(found_images)
+                
+                # If we found images in this directory, we can stop looking
+                if image_files:
+                    break
+        
+        if not image_files:
+            # Create a simple fallback HTML if no images found
+            html_content = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Preview App</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; text-align: center; }
+                    .container { max-width: 800px; margin: 0 auto; }
+                    .message { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 20px; }
+                    h1 { color: #343a40; }
+                    p { color: #6c757d; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="message">
+                        <h1>No Images Available</h1>
+                        <p>No image files were found in this project. Please process some Excel files or add images to generate a preview.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+            
+            # Save the fallback HTML
+            output_file = os.path.join(current_project.output_dir, "preview_app.html")
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(html_content)
+                
+            return jsonify({
+                "status": "success",
+                "html": html_content,
+                "output_file": output_file,
+                "warning": "No images found, using fallback template"
+            })
+            
+        # ...continue with existing code for the case when images are found...
+
+        # Load the images as base64
+        image_data = {}
+        for image_file in image_files:
+            try:
+                with open(image_file, "rb") as f:
+                    image_bytes = f.read()
+                    encoded_image = base64.b64encode(image_bytes).decode("utf-8")
+                    image_data[image_file.name] = {
+                        "data": encoded_image,
+                        "path": str(image_file.relative_to(image_dir) if hasattr(image_file, "relative_to") else image_file.name)
+                    }
+            except Exception as e:
+                print(f"Error loading image {image_file}: {str(e)}")
+
+        # --- First Gemini API call - Generate Detailed Prompt ---
+        first_prompt = "From these images, write a detailed prompt to create a preview app using only HTML. Describe the flow process in detail so another AI can understand the full context of the application shown in the images."
+
+        first_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": first_prompt}
+                ]
+            }
+        ]
+
+        # Add image content to the first message
+        for image_name, image_info in image_data.items():
+            first_messages[0]["content"].append({
+                "type": "image_url",
+                "image_url": f"data:image/png;base64,{image_info['data']}"
+            })
+
+        # Make first API call to Gemini
+        api_key_1 = os.getenv('GEMINI_API_KEY_1')
+        os.environ["GEMINI_API_KEY"] = api_key_1
+
+        first_response = litellm.completion(
+            model="gemini/gemini-2.0-flash-thinking-exp",
+            messages=first_messages,
+            temperature=0.2
+        )
+
+        generated_prompt = first_response.choices[0].message.content
+
+        # --- Second Gemini API call - Generate HTML Preview App ---
+        second_prompt_prefix = f"""
+        Based on the following detailed prompt and the images I give you, generate a preview app using only HTML, CSS, and JavaScript.
+        The preview should be fully functional as a static HTML page and visually match the screens in the images.
+        Ensure the app:
+        1. Is a single HTML file (no separate files).
+        2. Is responsive and well-designed.
+        3. Includes navigation to access different screens/views shown in the images.
+        4. Uses vanilla JavaScript for interactivity (no external libraries).
+        5. Has a clean, professional design.
+        6. Implements client-side navigation using JavaScript to show and hide different sections/views within the single HTML file.
+
+        Detailed Prompt:
+        {generated_prompt}
+
+        Generate the complete HTML code, including embedded CSS in `<style>` tags and JavaScript in `<script>` tags.
+        """
+
+        second_prompt = second_prompt_prefix
+
+        second_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": second_prompt}
+                ]
+            }
+        ]
+
+        # Add image content to the second message
+        for image_name, image_info in image_data.items():
+            second_messages[0]["content"].append({
+                "type": "image_url",
+                "image_url": f"data:image/png;base64,{image_info['data']}"
+            })
+
+        # Make second API call to Gemini
+        api_key_2 = os.getenv('GEMINI_API_KEY_2')
+        os.environ["GEMINI_API_KEY"] = api_key_2
+
+        second_response = litellm.completion(
+            model="gemini/gemini-2.0-flash-thinking-exp",
+            messages=second_messages,
+            temperature=0.2
+        )
+
+        final_html = second_response.choices[0].message.content
+
+        # Extract just the HTML part (using the nested function)
+        # Define a simple function to extract HTML content
+        def extract_html_content(html):
+            return html.strip()  # Example: Strip any leading/trailing whitespace
+
+        html_content = extract_html_content(final_html)
+
+        # # Modify the HTML to work better with CSP restrictions
+        # if "<head>" in html_content:
+        #     # Add CSP meta tag that's more permissive for the preview
+        #     csp_meta = '<meta http-equiv="Content-Security-Policy" content="default-src *; style-src * \'unsafe-inline\'; script-src * \'unsafe-inline\' \'unsafe-eval\';">'
+        #     html_content = html_content.replace("<head>", f"<head>\n    {csp_meta}")
+
+        # Save the generated HTML to the project
+        output_file = os.path.join(current_project.output_dir, "preview_app.html")
+        with open(output_file, "w", encoding="utf-8") as f:  # Ensure UTF-8 encoding
+            f.write(html_content)
+
+        # Record in project history
+        current_project.add_processing_record(
+            operation="preview_app_generation",
+            input_files=[str(f) for f in image_files],
+            output_files=[output_file],
+            details={"generated_prompt_preview": generated_prompt[:150] + "..."}  # Save a longer preview
+        )
+        current_project.save_metadata()
+
+        return jsonify({
+            "status": "success",
+            "html": html_content,
+            "output_file": output_file
+        })
+
+    except Exception as e:
+        import traceback
+        error_message = f"Error generating preview app: {str(e)}"
+        print(error_message)
+        traceback.print_exc()  # Print full traceback for debugging
+        return jsonify({"error": error_message}), 500
+
+
+@app.route('/preview/<project_id>', methods=['GET'])
+def serve_preview_app(project_id):
+    """Serve the preview app HTML file for a project."""
+    global current_project
+
+    # Find the project in registry
+    projects = load_projects_registry()
+    project_info = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project_info:
+        return jsonify({"error": "Project not found in registry"}), 404
+
+    base_dir = project_info["base_dir"]
+    for item in os.listdir(base_dir):
+        if item.endswith(f"_{project_id}"):
+            project_output_dir = os.path.join(base_dir, item, "output")
+            preview_app_path = os.path.join(project_output_dir, "preview_app.html")
+            if os.path.exists(preview_app_path):
+                # Read the file and serve it with custom headers
+                with open(preview_app_path, 'r', encoding='utf-8') as file:
+                    html_content = file.read()
+                
+                response = app.response_class(
+                    response=html_content,
+                    status=200,
+                    mimetype='text/html'
+                )
+                
+                # # Add explicit headers for this response
+                # response.headers['X-Frame-Options'] = 'ALLOWALL'
+                # response.headers['Access-Control-Allow-Origin'] = '*'
+                # response.headers['Content-Security-Policy'] = "default-src * 'unsafe-inline' 'unsafe-eval'; frame-ancestors *"
+                return response
+
+    return jsonify({"error": "Preview app not found"}), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

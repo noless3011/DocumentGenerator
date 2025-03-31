@@ -318,3 +318,4 @@ DGUI/outputs/**
 FileHandling/output/**
 FileHandling/uploads/**
 FileHandling/experiments/**
+project_registry.json
