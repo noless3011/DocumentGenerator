@@ -5,7 +5,6 @@ from utils.Message import Message
 from flask import current_app
 from agents.IAgent import IAgent
 
-# TODO: Implement the ClassDiagramAgent class with structured input/output
 class ClassDiagramAgent(IAgent):
     def __init__(self, model):
         self.model = model
@@ -14,9 +13,77 @@ class ClassDiagramAgent(IAgent):
         """Generate a class diagram in JSON format using LLM with code/data files."""
         message.add_user_text("Based on the provided code files and data, create a class diagram. Output the result in JSON format with classes, attributes, methods, and relationships.")
         
+        schema = {
+            "type": "object",
+            "properties": {
+                "classes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "attributes": {
+                        "type": "array",
+                        "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                            "type": "string"
+                            },
+                            "type": {
+                            "type": "string"
+                            }
+                        }
+                        }
+                    },
+                    "methods": {
+                        "type": "array",
+                        "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                            "type": "string"
+                            },
+                            "returnType": {
+                            "type": "string"
+                            }
+                        }
+                        }
+                    }
+                    }
+                }
+                },
+                "relationships": {
+                "type": "object",
+                "properties": {
+                    "from": {
+                    "type": "string"
+                    },
+                    "to": {
+                    "type": "string"
+                    },
+                    "type": {
+                    "type": "string",
+                    "enum": [
+                        "association",
+                        "aggregation",
+                        "composition",
+                        "inheritance ",
+                        "dependency",
+                        "realization"
+                    ]
+                    }
+                }
+                }
+            }
+            }
+
         response = litellm.completion(
             model=self.model,
-            messages=message.get_conversation()
+            messages=message.get_conversation(),
+            response_format={"type": "json_object", "response_schema": schema}
         )
         
         current_app.logger.info(f"Raw class diagram response received")
@@ -24,13 +91,8 @@ class ClassDiagramAgent(IAgent):
         try:
             # Extract JSON from the response
             content = response.choices[0].message.content
-            # Find JSON content (assuming it might be in a code block or mixed with text)
-            json_start = content.find('{')
-            json_end = content.rfind('}') + 1
-            
-            if json_start >= 0 and json_end > json_start:
-                json_content = content[json_start:json_end]
-                class_diagram = json.loads(json_content)
+            if content.startswith("{") and content.endswith("}"):
+                class_diagram = json.loads(content)
                 return class_diagram
             else:
                 current_app.logger.error("No JSON content found in response")

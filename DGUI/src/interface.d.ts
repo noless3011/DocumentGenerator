@@ -11,6 +11,7 @@ export interface IMyAPI {
     json: string[],
     html: string[],
   }>
+  readJsonFile: (path: string) => Promise<any>
 }
 
 declare global {

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import ClassDiagram from '../models/ClassDiagram'; 
+import ClassDiagram from '../models/ClassDiagram';
 
 
 interface ClassDiagramResponse {
@@ -57,26 +57,14 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
     useEffect(() => {
         const container = diagramRef.current;
         let diagram: ClassDiagram | null = null;
-        
+
         if (container) {
             // Create new diagram instance
             diagram = new ClassDiagram(container);
             setClassDiagramInstance(diagram);
-            
-            // Fetch class diagram data
-            fetch('http://localhost:5000/api/class-diagram', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(diagramData => {
+            window.myAPI.readJsonFile(fileDir).then((diagramData) => {
+                // print as text
+                console.log(fileDir)
                 if (diagram && diagramData && diagramData.classes && diagramData.relationships) {
                     // Process classes and relationships from JSON data
                     diagramData.classes.forEach((classData: ClassDataFromBackend) => {
@@ -88,13 +76,13 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
                 } else if (diagramData && diagramData.error) {
                     alert(`Error loading diagram data: ${diagramData.error}`);
                 }
-            })
-            .catch(error => {
+            }).catch((error: any) => {
                 console.error("Error fetching initial class diagram data:", error);
                 alert("Failed to load initial class diagram data from backend.");
+            }).finally(() => {
+                console.log("Diagram data loaded successfully.");
             });
         }
-        
         // Cleanup function to dispose of the diagram when component unmounts
         return () => {
             if (diagram) {
@@ -307,8 +295,7 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
             <div
                 ref={diagramRef}
                 id="myDiagramDiv"
-                className='w-full h-full border-solid border-2 border-gray-300'
-                style={{ height: '600px' }}
+                className='w-full border-solid border-2 border-gray-300 h-full'
             />
         </div>
     );

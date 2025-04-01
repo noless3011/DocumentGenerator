@@ -429,9 +429,38 @@ def generate_text_document():
     {
         "status": "success", 
         "message": "Document generated successfully", 
-        "name": "generated_document.md",
+        "dir": output_file,
     } 
     """
+    global current_project
+    if not current_project:
+        return jsonify({"error": "No active project. Please create or load a project first."}), 400
+    try:
+        # Generate the document
+        document_content = generator.generate_text_document()
+        output_file = os.path.join(current_project.output_dir, "generated_document.md")
+        generator.save_document(document_content, output_file)
+
+        # Add processing record to project
+        current_project.add_processing_record(
+            operation="document_generation",
+            input_files=current_project.files.get("input", []),
+            output_files=[{"path": output_file, "name": "generated_document.md"}],
+            details={}
+        )
+
+        current_project.save_metadata()
+
+        return jsonify({
+            "status": "success",
+            "message": "Document generated successfully",
+            "dir": output_file,
+        })
+    except Exception as e:
+        error_message = f"Error in /generate-text-document: {str(e)}"
+        print(error_message)
+        return jsonify({"error": error_message}), 500
+    
     
 
 @app.route('/generate-class-diagram', methods=['POST'])
@@ -442,7 +471,7 @@ def generate_class_diagram():
     {
         "status": "success", 
         "message": "Class diagram generated successfully", 
-        "name": "class_diagram.json",
+        "dir": output_file,
     } 
     """
     global current_project
@@ -468,7 +497,7 @@ def generate_class_diagram():
         return jsonify({
             "status": "success",
             "message": "Class diagram generated successfully",
-            "name": "class_diagram.json",
+            "dir": output_file,
         })
     except Exception as e:
         error_message = f"Error in /generate-class-diagram: {str(e)}"

@@ -21,8 +21,10 @@ contextBridge.exposeInMainWorld('myAPI', {
   selectFolder: (): Promise<string> => ipcRenderer.invoke('dialog:openDirectory'),
   readFileAsBase64: (path: string): Promise<string> => ipcRenderer.invoke('file:readFileAsBase64', path),
   readFileAsText: (path: string): Promise<string> => ipcRenderer.invoke('file:readFileAsText', path),
+  readJsonFile: (path: string): Promise<any> => ipcRenderer.invoke('file:readJsonFile', path),
   saveFile: (path: string, content: string): Promise<void> => ipcRenderer.invoke('file:saveFile', path, content),
   // Use the correct IPC channel name that matches the main process handler
   getProcessedFilesFromProject: (project: Project): Promise<ProcessedFiles> => 
     ipcRenderer.invoke('view:processedFileFromProject', project)
+  
 });

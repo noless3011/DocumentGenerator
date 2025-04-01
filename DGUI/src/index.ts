@@ -96,6 +96,15 @@ const createWindow = (): void => {
       return `Error reading project files: ${error instanceof Error ? error.message : String(error)}`;
     }
   });
+  ipcMain.handle('file:readJsonFile', async (_, filePath) => {
+    try{
+      const data = await fs.readFile(filePath, 'utf-8');
+      const jsonData = JSON.parse(data);
+      return jsonData;
+    }catch(error){
+      return `Error reading file: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  });
 };
 
 // This method will be called when Electron has finished
