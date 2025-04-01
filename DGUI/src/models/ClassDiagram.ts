@@ -283,6 +283,12 @@ class ClassDiagram implements IDiagram {
         return (this.diagram.model as go.GraphLinksModel).linkDataArray;
     }
 
+    public dispose() {
+        if (this.diagram) {
+            this.diagram.div = null; // Removes the reference to the HTML div
+            this.diagram = null;     // Clear the diagram instance
+        }
+    }
 
     // updateClassDropdowns(), updateSelectedClassDropdown(), updateSelectedClassUI(),
     // showAddClassInput(), hideAddClassInput() - UI related functions will be in React

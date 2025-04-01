@@ -1,5 +1,25 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import ClassDiagram from '../models/ClassDiagram'; // Fixed import path
+import ClassDiagram from '../models/ClassDiagram';
+
+
+interface ClassDiagramResponse {
+    classes: ClassDataFromBackend[];
+    relationships: RelationshipDataFromBackend[];
+    error?: string; // Optional error property
+}
+
+interface ClassDataFromBackend {
+    name: string;
+    loc?: string; // Assuming 'loc' is optional, adjust if needed
+    // Add other properties you expect in your class data from backend, e.g., properties, methods
+}
+
+interface RelationshipDataFromBackend {
+    from: string;
+    to: string;
+    relationship: string;
+    // Add other relationship properties if needed
+}
 
 interface DiagramViewProps {
     fileDir: string;
@@ -36,20 +56,48 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
 
     useEffect(() => {
         const container = diagramRef.current;
-        if (container) {
-            const diagram = new ClassDiagram(container);
-            setClassDiagramInstance(diagram);
-            // Initialize diagram with some example data if needed, or fetch from backend here
-        }
-        return () => { };
-    }, []);
+        let diagram: ClassDiagram | null = null;
 
-    // Function to update class dropdown options
+        if (container) {
+            // Create new diagram instance
+            diagram = new ClassDiagram(container);
+            setClassDiagramInstance(diagram);
+            window.myAPI.readJsonFile(fileDir).then((diagramData) => {
+                // print as text
+                console.log(fileDir)
+                if (diagram && diagramData && diagramData.classes && diagramData.relationships) {
+                    // Process classes and relationships from JSON data
+                    diagramData.classes.forEach((classData: ClassDataFromBackend) => {
+                        diagram?.addClass(classData.name, classData.loc ? parseInt(classData.loc.split(' ')[0]) : 200, classData.loc ? parseInt(classData.loc.split(' ')[1]) : 200);
+                    });
+                    diagramData.relationships.forEach((relationshipData: RelationshipDataFromBackend) => {
+                        diagram?.addLink(relationshipData.from, relationshipData.to, relationshipData.relationship);
+                    });
+                } else if (diagramData && diagramData.error) {
+                    alert(`Error loading diagram data: ${diagramData.error}`);
+                }
+            }).catch((error: any) => {
+                console.error("Error fetching initial class diagram data:", error);
+                alert("Failed to load initial class diagram data from backend.");
+            }).finally(() => {
+                console.log("Diagram data loaded successfully.");
+            });
+        }
+        // Cleanup function to dispose of the diagram when component unmounts
+        return () => {
+            if (diagram) {
+                diagram.dispose();
+                setClassDiagramInstance(null);
+            }
+        };
+    }, []); // Empty dependency array means this effect runs once on mount
+
+    // Function update class dropdown options
     const updateClassDropdowns = useCallback(() => {
         if (!classDiagramInstance) return [];
         const nodeDataArray = classDiagramInstance.getNodeDataArray();
         const options = nodeDataArray.map((nodeData: NodeData) => ({ key: nodeData.key, name: nodeData.name }));
-        console.log("Class Dropdown Options:", options); // ADD THIS LINE
+        // console.log("Class Dropdown Options:", options);
         return options;
     }, [classDiagramInstance]);
 
@@ -247,8 +295,7 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
             <div
                 ref={diagramRef}
                 id="myDiagramDiv"
-                className='w-full h-full border-solid border-2 border-gray-300'
-                style={{ height: '600px' }}
+                className='w-full border-solid border-2 border-gray-300 h-full'
             />
         </div>
     );
