@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, use, useEffect, useRef } from 'react';
 import '@xyflow/react/dist/base.css';
 import {
     ReactFlow,
@@ -19,18 +19,23 @@ import {
     Controls,
     ControlButton,
     ConnectionMode,
+    MarkerType,
+    EdgeMouseHandler,
 } from '@xyflow/react';
 import ClassNode from './ClassDiagram/ClassNode';
 import { type ClassNodeData } from './ClassDiagram/ClassNode';
-import ClassEdge from './ClassDiagram/ClassEdge';
+import ClassEdge, { EdgeTypes } from './ClassDiagram/ClassEdge';
 import { Button } from '@mui/material';
-import { ControlCamera } from '@mui/icons-material';
+import { Add, ControlCamera } from '@mui/icons-material';
+import EdgeTypeMenu from './ClassDiagram/EdgeTypeMenu';
+import MarkerDef from './ClassDiagram/MarkerDef';
 const nodeTypes = {
     class: ClassNode,
 };
 const edgeTypes = {
     default: ClassEdge,
 }
+
 const classNodeDataList: ClassNodeData[] = [
     {
         name: 'MyClass',
@@ -60,11 +65,17 @@ const initialNodes: Node[] = classNodeDataList.map((data, index) => ({
     id: `class-${index}`,
     type: 'class',
     position: { x: index * 200, y: 100 },
-    data: { class: data },
+    dragHandle: '.drag-handle_custom',
+    data: { class: data, id: `class-${index}` },
 }));
 
 const initialEdges: Edge[] = [
-    { id: 'e1-2', source: 'class-0', target: 'class-1', type: 'default' },];
+    {
+        id: 'e1-2', source: 'class-0', target: 'class-1',
+        sourceHandle: 'c',
+        targetHandle: 'a',
+        type: 'default',
+    },];
 
 const fitViewOptions: FitViewOptions = {
     padding: 0.2,
@@ -72,13 +83,14 @@ const fitViewOptions: FitViewOptions = {
 
 const defaultEdgeOptions: DefaultEdgeOptions = {
     animated: true,
+    interactionWidth: 20,
+    markerEnd: { type: MarkerType.Arrow },
 };
 
-const onNodeDrag: OnNodeDrag = (_, node) => {
-    console.log('drag event', node.data);
-};
 
 const DiagramCanvas = () => {
+    const canvas = useRef<HTMLDivElement>(null);
+    const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
     const [nodes, setNodes] = useState<Node[]>(initialNodes);
     const [edges, setEdges] = useState<Edge[]>(initialEdges);
 
@@ -95,18 +107,61 @@ const DiagramCanvas = () => {
         [setEdges],
     );
 
+
     const addClassNode = () => {
-        const newNode = {
+        const newClassData: ClassNodeData = {
+            name: 'NewClass',
+            attributes: [],
+            methods: [],
+        }
+        classNodeDataList.push(newClassData);
+        const newClassNode = {
             id: `class-${nodes.length}`,
             type: 'class',
             position: { x: nodes.length * 200, y: 100 },
             data: { class: classNodeDataList[nodes.length % classNodeDataList.length] },
         };
-        setNodes((nds) => nds.concat(newNode));
+        setNodes((nds) => nds.concat(newClassNode))
     }
+
+    const onEdgeContextMenu = useCallback<EdgeMouseHandler>(
+        (event, edge) => {
+            event.preventDefault(); // Prevent native context menu
+            const reactFlowBounds = canvas.current.getBoundingClientRect();
+
+            // Calculate position relative to the React Flow container
+            const top = event.clientY - reactFlowBounds.top;
+            const left = event.clientX - reactFlowBounds.left;
+            setMenu({
+                id: edge.id,
+                top: top,
+                left: left,
+            });
+
+        },
+        [setMenu]
+    );
+
+    // Close menu on pane click
+    const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
+
+    // Handler passed to the EdgeTypeMenu
+    const handleSelectEdgeType = (edgeId: string, type: EdgeTypes) => {
+        setEdges((eds) =>
+            eds.map((edge) => {
+                if (edge.id === edgeId) {
+                    // Update the edge - e.g., change its label or a custom type property
+                    return { ...edge, label: type /* or data: { ...edge.data, type: type } */ };
+                }
+                return edge;
+            })
+        );
+        setMenu(null); // Close the menu
+    };
     return (
         <>
             <ReactFlow
+                ref={canvas}
                 style={{ backgroundColor: '#f0f0f0' }}
                 nodes={nodes}
                 edges={edges}
@@ -115,22 +170,31 @@ const DiagramCanvas = () => {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
-                onNodeDrag={onNodeDrag}
+                onPaneClick={onPaneClick}
                 connectionMode={ConnectionMode.Loose}
+                onEdgeContextMenu={onEdgeContextMenu}
                 fitView
                 fitViewOptions={fitViewOptions}
                 defaultEdgeOptions={defaultEdgeOptions}
             >
+                <MarkerDef></MarkerDef>
                 <Background color="#ccc" variant={BackgroundVariant.Dots} />
                 <Controls>
-                    <ControlButton onClick={() => alert('Something magical just happened. ✨')}>
-                        <ControlCamera></ControlCamera>
-                    </ControlButton>
+                    <Button variant="contained" onClick={addClassNode} className=''>
+                        Add Class Node
+                    </Button>
                 </Controls>
+                {menu && (
+                    <EdgeTypeMenu
+                        id={menu.id}
+                        top={menu.top}
+                        left={menu.left}
+                        onSelectEdgeType={handleSelectEdgeType}
+                    // Optional: Add a className for further styling from here
+                    // className="my-custom-menu-styles"
+                    />
+                )}
             </ReactFlow>
-            <Button variant="contained" onClick={addClassNode} className=''>
-                Add Class Node
-            </Button>
         </>
 
     );

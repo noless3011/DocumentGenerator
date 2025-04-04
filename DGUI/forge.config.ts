@@ -18,6 +18,7 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],
+  
   plugins: [
     new AutoUnpackNativesPlugin({}),
     new WebpackPlugin({
@@ -43,7 +44,17 @@ const config: ForgeConfig = {
             'Content-Security-Policy': "default-src 'self'; connect-src 'self' http://localhost:5000; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' http://localhost:5000;",
             'Access-Control-Allow-Origin': '*',
 
-        } 
+        },
+        client: {
+          overlay: {
+            runtimeErrors: (error) => {
+              if (error.message.includes("ResizeObserver loop completed with undelivered notifications")) {
+                return false;
+              }
+              return true;
+            },
+          },
+        },
       }
     }),
     // Fuses are used to enable/disable various Electron functionality
