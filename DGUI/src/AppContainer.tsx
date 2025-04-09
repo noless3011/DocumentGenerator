@@ -3,8 +3,9 @@ import DocumentsHandling from './pages/DocumentsHandlingView';
 import ResultsView from './pages/ResultsView';
 import ProjectManagingMenu from './components/DocumentsHandling/ProjectManagingMenu';
 import { Project } from './components/DocumentsHandling/ProjectManagingMenu';
-import DiagramCanvas from './components/DiagramComponents/DiagramCanvas';
+import ClassDiagramCanvas from './components/DiagramComponents/ClassDiagramCanvas';
 import { ReactFlowProvider } from '@xyflow/react';
+import DatabaseDiagramCanvas from './components/DiagramComponents/DatabaseDiagramCanvas';
 interface VerticalTabProps {
     label: string;
     icon?: React.ReactNode;
@@ -60,7 +61,7 @@ const AppContainer: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M12 4a8 8 0 100 16 8 8 0 000-16z" />
                 </svg>
             ),
-            content: <div className="p-4 w-[1500px] h-[800px]"><ReactFlowProvider><DiagramCanvas></DiagramCanvas></ReactFlowProvider></div>
+            content: <div className="p-4 w-[1500px] h-[800px]"><ReactFlowProvider><DatabaseDiagramCanvas></DatabaseDiagramCanvas></ReactFlowProvider></div>
         }
     ];
     // Use provided tabs or fallback to test tabs
