@@ -28,7 +28,6 @@ import ClassEdge, { EdgeTypes } from './ClassDiagram/ClassEdge';
 import { Button } from '@mui/material';
 import { Add, ControlCamera } from '@mui/icons-material';
 import EdgeTypeMenu from './ClassDiagram/EdgeTypeMenu';
-import MarkerDef from './ClassDiagram/MarkerDef';
 const nodeTypes = {
     class: ClassNode,
 };
@@ -75,6 +74,7 @@ const initialEdges: Edge[] = [
         sourceHandle: 'c',
         targetHandle: 'a',
         type: 'default',
+        data: { type: EdgeTypes.Inheritance },
     },];
 
 const fitViewOptions: FitViewOptions = {
@@ -82,13 +82,13 @@ const fitViewOptions: FitViewOptions = {
 };
 
 const defaultEdgeOptions: DefaultEdgeOptions = {
-    animated: true,
-    interactionWidth: 20,
-    markerEnd: { type: MarkerType.Arrow },
+    animated: false,
+    style: { stroke: 'black' },
+    interactionWidth: 20
 };
 
 
-const DiagramCanvas = () => {
+const ClassDiagramCanvas = () => {
     const canvas = useRef<HTMLDivElement>(null);
     const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
     const [nodes, setNodes] = useState<Node[]>(initialNodes);
@@ -103,7 +103,7 @@ const DiagramCanvas = () => {
         [setEdges],
     );
     const onConnect: OnConnect = useCallback(
-        (connection) => setEdges((eds) => addEdge(connection, eds)),
+        (params) => setEdges((eds) => addEdge({ ...params, type: 'default', data: { type: EdgeTypes.Aggregation } }, eds)),
         [setEdges],
     );
 
@@ -145,19 +145,28 @@ const DiagramCanvas = () => {
     // Close menu on pane click
     const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
 
+
     // Handler passed to the EdgeTypeMenu
     const handleSelectEdgeType = (edgeId: string, type: EdgeTypes) => {
         setEdges((eds) =>
             eds.map((edge) => {
                 if (edge.id === edgeId) {
-                    // Update the edge - e.g., change its label or a custom type property
-                    return { ...edge, label: type /* or data: { ...edge.data, type: type } */ };
+                    // Properly update the data.type property
+                    return {
+                        ...edge,
+                        data: { ...(edge.data || {}), type: type }
+                    };
                 }
                 return edge;
             })
         );
-        setMenu(null); // Close the menu
+        setMenu(null);
     };
+
+    const handleDeleteEdge = (edgeId: string) => {
+        setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
+        setMenu(null);
+    }
     return (
         <>
             <ReactFlow
@@ -177,7 +186,6 @@ const DiagramCanvas = () => {
                 fitViewOptions={fitViewOptions}
                 defaultEdgeOptions={defaultEdgeOptions}
             >
-                <MarkerDef></MarkerDef>
                 <Background color="#ccc" variant={BackgroundVariant.Dots} />
                 <Controls>
                     <Button variant="contained" onClick={addClassNode} className=''>
@@ -190,6 +198,8 @@ const DiagramCanvas = () => {
                         top={menu.top}
                         left={menu.left}
                         onSelectEdgeType={handleSelectEdgeType}
+                        onDeleteEdge={handleDeleteEdge}
+                        onClick={(e) => e.stopPropagation()} // Prevent closing the menu when clicking inside it
                     // Optional: Add a className for further styling from here
                     // className="my-custom-menu-styles"
                     />
@@ -200,4 +210,4 @@ const DiagramCanvas = () => {
     );
 }
 
-export default DiagramCanvas;
+export default ClassDiagramCanvas;

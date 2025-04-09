@@ -52,7 +52,7 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
         border: '2px solid aqua',
     };
     return (
-        <div className='border border-gray-300 rounded bg-yellow-200 flex flex-col h-full overflow-hidden'>
+        <div className='border border-gray-300 rounded bg-yellow-300 flex flex-col h-full overflow-hidden'>
             <NodeResizer isVisible={selected} minWidth={150} minHeight={100} lineStyle={resizeBorderStyle} />
             <Handle className='w-3 h-3 rounded-full !bg-blue-500' type="source" position={Position.Top} id="a" />
             <Handle className='w-3 h-3 rounded-full !bg-blue-500' type="source" position={Position.Right} id="b" />
@@ -60,7 +60,7 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
             <Handle className='w-3 h-3 rounded-full !bg-blue-500' type="source" position={Position.Left} id="d" />
 
             <div className="p-2.5 flex-grow flex flex-col min-w-0">
-                <div className='drag-handle_custom pb-1 mb-1 h-10 bg-blue-400 rounded-lg'></div>
+                <div className='drag-handle_custom pb-1 mb-1 h-6 bg-slate-400 rounded-lg'></div>
                 <div className='text-center font-bold text-lg border-b-2 border-solid border-gray-800 pb-1 mb-1'>
                     <input
                         type="text"
@@ -70,11 +70,11 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
                         placeholder="ClassName"
                     />
                 </div>
-                <div className='text-sm border-b-2 border-solid border-gray-800 pb-1 mb-1 min-h-[30px] flex-shrink-0'>
+                <div className='text-lg border-b-2 border-solid border-gray-800 pb-1 mb-1 min-h-[30px] flex-shrink-0'>
                     <div className='font-semibold mb-0.5'>Attributes</div>
                     <ul className='list-none pl-1 space-y-0.5'>
                         {attributes.map((attr, index) => (
-                            <li key={index} className="flex items-center text-xs">
+                            <li key={index} className="flex items-center text-lg">
                                 <span className="mr-1 text-gray-600">+</span>
                                 <input
                                     type="text"
@@ -110,11 +110,11 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
                         </li>
                     </ul>
                 </div>
-                <div className='text-sm min-h-[30px] flex-shrink-0'>
+                <div className='text-lg min-h-[30px] flex-shrink-0'>
                     <div className='font-semibold mb-0.5'>Methods</div>
                     <ul className='list-none pl-1 space-y-0.5'>
                         {methods.map((method, index) => (
-                            <li key={index} className="flex items-center text-xs">
+                            <li key={index} className="flex items-center text-lg">
                                 <span className="mr-1 text-gray-600">+</span>
                                 <input
                                     type="text"

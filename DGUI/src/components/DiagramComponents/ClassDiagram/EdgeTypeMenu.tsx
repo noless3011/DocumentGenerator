@@ -7,6 +7,7 @@ interface EdgeTypeMenuProps extends React.HTMLAttributes<HTMLDivElement> {
     right?: number;
     bottom?: number;
     onSelectEdgeType: (edgeId: string, type: EdgeTypes) => void;
+    onDeleteEdge: (edgeId: string) => void;
 }
 
 const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
@@ -16,6 +17,7 @@ const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
     right,
     bottom,
     onSelectEdgeType,
+    onDeleteEdge,
     className,
     ...props
 }) => {
@@ -24,6 +26,10 @@ const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
         onSelectEdgeType(id, type);
     }, [id, onSelectEdgeType]);
 
+    const handleDeleteEdge = useCallback(() => {
+        onDeleteEdge(id);
+    }
+        , [id, onDeleteEdge]);
     const menuStyle: CSSProperties = {
         position: 'absolute',
         top,
@@ -46,15 +52,28 @@ const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
             </p>
 
             <div className="flex flex-col space-y-1">
-                {Object.entries(EdgeTypes).map(([key, value], index, array) => index < array.length / 2 ? ( // Because enum will create a array with twice the size of the number of values
-                    <button
-                        key={key}
-                        className="flex items-center p-2 hover:bg-gray-100 rounded"
-                        onClick={() => handleTypeSelect(value as EdgeTypes)}
-                    >
-                        <span className="text-sm">{value}</span>
-                    </button>
-                ) : null)}
+                {/* Iterate over enum VALUES directly */}
+                {Object.values(EdgeTypes)
+                    // Filter out the numeric keys if it's a numeric enum
+                    .filter(value => typeof value === 'string')
+                    .map((enumValue) => (
+                        <button
+                            key={enumValue} // Use the value as key
+                            className="flex items-center p-2 hover:bg-gray-100 rounded text-left w-full" // Added text-left and w-full
+                            onClick={() => handleTypeSelect(enumValue as EdgeTypes)}
+                        >
+                            {/* Display the string value */}
+                            <span className="text-sm">{enumValue}</span>
+                        </button>
+                    ))}
+                {/*delete button */}
+                <button
+                    className="flex items-center p-2 hover:bg-gray-100 rounded text-left w-full" // Added text-left and w-full
+                    onClick={() => handleDeleteEdge()}
+                >
+                    {/* Display the string value */}
+                    <span className="text-sm text-red-600">Delete</span>
+                </button>
             </div>
         </div>
     );
