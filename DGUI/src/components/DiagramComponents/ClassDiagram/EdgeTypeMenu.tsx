@@ -1,12 +1,12 @@
 import React, { CSSProperties, useCallback } from 'react';
-import { EdgeTypes } from './ClassEdge';
+import { RelationshipType } from '../../../models/ClassDiagram';
 interface EdgeTypeMenuProps extends React.HTMLAttributes<HTMLDivElement> {
     id: string; // Edge ID
     top?: number;
     left?: number;
     right?: number;
     bottom?: number;
-    onSelectEdgeType: (edgeId: string, type: EdgeTypes) => void;
+    onSelectEdgeType: (edgeId: string, type: RelationshipType) => void;
     onDeleteEdge: (edgeId: string) => void;
 }
 
@@ -22,7 +22,7 @@ const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
     ...props
 }) => {
 
-    const handleTypeSelect = useCallback((type: EdgeTypes) => {
+    const handleTypeSelect = useCallback((type: RelationshipType) => {
         onSelectEdgeType(id, type);
     }, [id, onSelectEdgeType]);
 
@@ -53,14 +53,14 @@ const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
 
             <div className="flex flex-col space-y-1">
                 {/* Iterate over enum VALUES directly */}
-                {Object.values(EdgeTypes)
+                {Object.values(RelationshipType)
                     // Filter out the numeric keys if it's a numeric enum
                     .filter(value => typeof value === 'string')
                     .map((enumValue) => (
                         <button
                             key={enumValue} // Use the value as key
                             className="flex items-center p-2 hover:bg-gray-100 rounded text-left w-full" // Added text-left and w-full
-                            onClick={() => handleTypeSelect(enumValue as EdgeTypes)}
+                            onClick={() => handleTypeSelect(enumValue as RelationshipType)}
                         >
                             {/* Display the string value */}
                             <span className="text-sm">{enumValue}</span>

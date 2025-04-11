@@ -154,6 +154,10 @@ def load_project(project_id):
                     current_project.scan_and_update_files()
                     generator.change_project(project)
                     generator.initialize_message()
+                    # output the initial message to a txt file
+                    output_dir = os.path.join(current_project.output_dir, "initial_message.txt")
+                    with open(output_dir, 'w', encoding='utf-8') as f:
+                        f.write(str(generator.init_message.get_conversation()))
                     return jsonify({
                         "status": "success",
                         "project_id": project.id,

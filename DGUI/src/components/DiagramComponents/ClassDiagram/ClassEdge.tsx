@@ -1,16 +1,9 @@
-import { getBezierPath, BaseEdge, type EdgeProps, type Edge, getSmoothStepPath, useInternalNode, InternalNode, Node, Position, MarkerType, EdgeLabelRenderer } from '@xyflow/react';
+import { getBezierPath, BaseEdge, type EdgeProps, type Edge, useInternalNode, InternalNode, Node, Position, EdgeLabelRenderer } from '@xyflow/react';
+import { RelationshipType, type Relationship } from '../../../models/ClassDiagram';
 import '@xyflow/react/dist/base.css';
-// enum naming convention
-export enum EdgeTypes {
-    Association = "Association",
-    Aggregation = "Aggregation",
-    Composition = "Composition",
-    Inheritance = "Inheritance",
-    Dependency = "Dependency",
-    Realization = "Realization",
-}
 
-type ClassEdgeProps = Edge<{ type: EdgeTypes }, 'default'>;
+// Update the edge data type to match the Relationship type in ClassDiagram
+type ClassEdgeProps = Edge<{ relationship: Relationship }, 'default'>;
 
 // --- Helper functions (keep as they are, they handle floating connections well) ---
 
@@ -26,7 +19,6 @@ function getCenter(node: InternalNode<Node>) {
         y: y + height / 2,
     }
 }
-
 
 function getHandleCoordsByPosition(node: InternalNode<Node>, handlePosition: Position) {
     // Defensive checks for node internals
@@ -102,7 +94,6 @@ function getClosestSide(source: InternalNode<Node>, target: InternalNode<Node>):
     }
 }
 
-
 export function getEdgeParams(sourceNode: InternalNode<Node>, targetNode: InternalNode<Node>) {
     const sourcePos = getClosestSide(sourceNode, targetNode);
     const targetPos = getClosestSide(targetNode, sourceNode); // Use the *opposite* perspective for the target
@@ -151,7 +142,7 @@ export default function ClassEdge({
     });
 
     // Determine style and markers based on edge type
-    const edgeType = data?.type ?? EdgeTypes.Association; // Default to Association
+    const edgeType = data?.relationship.type ?? RelationshipType.Association; // Default to Association
     let strokeDasharray = 'none';
     let markerStartUrl = '';
     let markerEndUrl = '';
@@ -165,31 +156,35 @@ export default function ClassEdge({
     }
 
     switch (edgeType) {
-        case EdgeTypes.Inheritance:
+        case RelationshipType.Inheritance:
             markerEndUrl = `url(#${markerIds.hollowTriangle})`;
             break;
-        case EdgeTypes.Realization:
+        case RelationshipType.Realization:
             markerEndUrl = `url(#${markerIds.hollowTriangle})`;
             strokeDasharray = '5, 5'; // Dashed line
             break;
-        case EdgeTypes.Dependency:
+        case RelationshipType.Dependency:
             markerEndUrl = `url(#${markerIds.openArrow})`;
             strokeDasharray = '5, 5'; // Dashed line
             break;
-        case EdgeTypes.Aggregation:
+        case RelationshipType.Aggregation:
             // Aggregation diamond is at the SOURCE
             markerStartUrl = `url(#${markerIds.hollowDiamond})`;
             break;
-        case EdgeTypes.Composition:
+        case RelationshipType.Composition:
             // Composition diamond is at the SOURCE
             markerStartUrl = `url(#${markerIds.filledDiamond})`;
             break;
-        case EdgeTypes.Association:
+        case RelationshipType.Association:
         default:
             // Simple line, no marker for basic association
-            // Could add an open arrow markerEndUrl here for directed association if needed
             break;
     }
+
+    // Calculate positions for multiplicity labels
+    // Position near the start and end of the path
+    const sourceMultiplicityPos = getMultiplicityPosition(sx, sy, sourcePos, 15);
+    const targetMultiplicityPos = getMultiplicityPosition(tx, ty, targetPos, 15);
 
     return (
         <>
@@ -271,24 +266,78 @@ export default function ClassEdge({
                 style={style} // Apply standard styles (stroke color, width etc.)
             />
 
+            {/* Relationship Type Label */}
             <EdgeLabelRenderer>
                 <div
                     style={{
                         position: 'absolute',
                         transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
                         background: '#f0f0f0',
+                        padding: '2px 4px',
                         borderRadius: 5,
                         fontSize: 8,
                         fontWeight: 700,
                     }}
                     className="nodrag nopan"
                 >
-                    {data.type}
+                    {data.relationship.type}
                 </div>
             </EdgeLabelRenderer>
 
+            {/* Multiplicity Labels */}
+            {data.relationship.fromMultiplicity && (
+                <EdgeLabelRenderer>
+                    <div
+                        style={{
+                            position: 'absolute',
+                            transform: `translate(-50%, -50%) translate(${sourceMultiplicityPos.x}px,${sourceMultiplicityPos.y}px)`,
+                            background: '#ffffff',
+                            padding: '1px 3px',
+                            borderRadius: 3,
+                            fontSize: 8,
+                            fontWeight: 400,
+                        }}
+                        className="nodrag nopan"
+                    >
+                        {data.relationship.fromMultiplicity}
+                    </div>
+                </EdgeLabelRenderer>
+            )}
 
-
+            {data.relationship.toMultiplicity && (
+                <EdgeLabelRenderer>
+                    <div
+                        style={{
+                            position: 'absolute',
+                            transform: `translate(-50%, -50%) translate(${targetMultiplicityPos.x}px,${targetMultiplicityPos.y}px)`,
+                            background: '#ffffff',
+                            padding: '1px 3px',
+                            borderRadius: 3,
+                            fontSize: 8,
+                            fontWeight: 400,
+                        }}
+                        className="nodrag nopan"
+                    >
+                        {data.relationship.toMultiplicity}
+                    </div>
+                </EdgeLabelRenderer>
+            )}
         </>
     );
+}
+
+// Helper to position multiplicity labels
+function getMultiplicityPosition(x: number, y: number, handlePosition: Position, offset: number = 15) {
+    switch (handlePosition) {
+        case Position.Left:
+            return { x: x - offset, y };
+        case Position.Right:
+            return { x: x + offset, y };
+        case Position.Top:
+            return { x, y: y - offset };
+        case Position.Bottom:
+            return { x, y: y + offset };
+        default:
+            return { x, y };
+    }
 }

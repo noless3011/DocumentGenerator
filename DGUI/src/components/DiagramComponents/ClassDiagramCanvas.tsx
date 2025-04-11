@@ -23,11 +23,11 @@ import {
     EdgeMouseHandler,
 } from '@xyflow/react';
 import ClassNode from './ClassDiagram/ClassNode';
-import { type ClassNodeData } from './ClassDiagram/ClassNode';
-import ClassEdge, { EdgeTypes } from './ClassDiagram/ClassEdge';
+import { Method, Attribute, Class, RelationshipType, Relationship } from '../../models/ClassDiagram';
+import ClassEdge from './ClassDiagram/ClassEdge';
 import { Button } from '@mui/material';
-import { Add, ControlCamera } from '@mui/icons-material';
 import EdgeTypeMenu from './ClassDiagram/EdgeTypeMenu';
+import { ClassDiagram } from '../../models/ClassDiagram';
 const nodeTypes = {
     class: ClassNode,
 };
@@ -35,47 +35,41 @@ const edgeTypes = {
     default: ClassEdge,
 }
 
-const classNodeDataList: ClassNodeData[] = [
-    {
-        name: 'MyClass',
-        attributes: [
-            { name: 'attribute1', type: 'string' },
-            { name: 'attribute2', type: 'number' },
-        ],
-        methods: [
-            { name: 'method1', returnType: 'void' },
-            { name: 'method2', returnType: 'string' },
-        ],
-    },
-    {
-        name: 'AnotherClass',
-        attributes: [
-            { name: 'attributeA', type: 'boolean' },
-            { name: 'attributeB', type: 'array' },
-        ],
-        methods: [
-            { name: 'methodA', returnType: 'number' },
-            { name: 'methodB', returnType: 'void' },
-        ],
-    },
-];
 
-const initialNodes: Node[] = classNodeDataList.map((data, index) => ({
-    id: `class-${index}`,
-    type: 'class',
-    position: { x: index * 200, y: 100 },
-    dragHandle: '.drag-handle_custom',
-    data: { class: data, id: `class-${index}` },
-}));
+const ClassDiagramToNodesAndEdges = (classDiagram: ClassDiagram) => {
+    const nodes: Node<{ class: Class, id: string }>[] = classDiagram.classes.map((classData, index) => ({
+        id: `class-${index}`,
+        type: 'class',
+        position: { x: index * 200, y: 100 },
+        data: { class: classData, id: `class-${index}` },
+    }));
 
-const initialEdges: Edge[] = [
-    {
-        id: 'e1-2', source: 'class-0', target: 'class-1',
-        sourceHandle: 'c',
-        targetHandle: 'a',
+    const edges: Edge<{ relation: Relationship }>[] = classDiagram.relationships.map((relationship, index) => ({
+        id: `edge-${index}`,
+        source: `class-${classDiagram.classes.findIndex(c => c.name === relationship.fromClass)}`,
+        target: `class-${classDiagram.classes.findIndex(c => c.name === relationship.toClass)}`,
         type: 'default',
-        data: { type: EdgeTypes.Inheritance },
-    },];
+        data: {
+            type: relationship.type,
+            fromMultiplicity: relationship.fromMultiplicity,
+            toMultiplicity: relationship.toMultiplicity,
+            fromClass: relationship.fromClass,
+            toClass: relationship.toClass
+        },
+    }));
+
+    return { nodes, edges };
+}
+const NodeAndEdgesToClassDiagram = (nodes: Node<{ class: Class, id: string }>[], edges: Edge<{ relationship: Relationship }>[]) => {
+    const classes: Class[] = nodes.map(node => node.data.class);
+    const relationships: Relationship[] = edges.map(edge => edge.data.relationship);
+    return new ClassDiagram('', classes, relationships);
+}
+
+
+
+const classDataList: Class[] = [];
+
 
 const fitViewOptions: FitViewOptions = {
     padding: 0.2,
@@ -87,39 +81,68 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
     interactionWidth: 20
 };
 
+interface ClassDiagramCanvasProps {
+    diagram: ClassDiagram;
+    fileDir?: string;
+}
 
-const ClassDiagramCanvas = () => {
+const ClassDiagramCanvas: React.FC<ClassDiagramCanvasProps> = ({ diagram, fileDir }) => {
+    const { nodes: initialNodes, edges: initialEdges } = ClassDiagramToNodesAndEdges(diagram);
     const canvas = useRef<HTMLDivElement>(null);
     const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
-    const [nodes, setNodes] = useState<Node[]>(initialNodes);
-    const [edges, setEdges] = useState<Edge[]>(initialEdges);
+    const [nodes, setNodes] = useState<Node<{ class: Class, id: string }>[]>(initialNodes);
+    const [edges, setEdges] = useState<Edge<{ relationship: Relationship }>[]>(initialEdges);
 
     const onNodesChange: OnNodesChange = useCallback(
-        (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
+        (changes) => setNodes((nds) => applyNodeChanges(changes, nds) as Node<{ class: Class, id: string }>[]),
         [setNodes],
     );
     const onEdgesChange: OnEdgesChange = useCallback(
-        (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+        (changes) => setEdges((eds) => applyEdgeChanges(changes, eds) as Edge<{ relationship: Relationship }>[]),
         [setEdges],
     );
     const onConnect: OnConnect = useCallback(
-        (params) => setEdges((eds) => addEdge({ ...params, type: 'default', data: { type: EdgeTypes.Aggregation } }, eds)),
+        (params) => setEdges((eds) => {
+            // find the source and target nodes class name
+            const sourceNode = nodes.find(node => node.id === params.source);
+            const targetNode = nodes.find(node => node.id === params.target);
+            if (!sourceNode || !targetNode) return eds; // Handle the case where nodes are not found
+            const sourceClass = sourceNode.data.class.name;
+            const targetClass = targetNode.data.class.name;
+            const defaultRelationship: Relationship = {
+                type: RelationshipType.Association,
+                fromClass: sourceClass || '',
+                toClass: targetClass || '',
+                fromMultiplicity: '1',
+                toMultiplicity: '1',
+            };
+            addEdge({ ...params, type: 'default', data: { relationship: null } }, eds)
+        }),
         [setEdges],
     );
 
-
+    const saveDiagram = () => {
+        const classDiagram = NodeAndEdgesToClassDiagram(nodes, edges);
+        const json = JSON.stringify(classDiagram, null, 2);
+        window.myAPI.saveFile(fileDir || '', json).then(() => {
+            console.log('File saved successfully!');
+        }).catch((error: Error) => {
+            console.error('Error saving file:', error);
+        });
+    }
     const addClassNode = () => {
-        const newClassData: ClassNodeData = {
-            name: 'NewClass',
+        const newClassData: Class = {
+            name: `Class ${nodes.length + 1}`,
+            type: 'class',
             attributes: [],
             methods: [],
         }
-        classNodeDataList.push(newClassData);
-        const newClassNode = {
+        classDataList.push(newClassData);
+        const newClassNode: Node<{ class: Class, id: string }> = {
             id: `class-${nodes.length}`,
             type: 'class',
             position: { x: nodes.length * 200, y: 100 },
-            data: { class: classNodeDataList[nodes.length % classNodeDataList.length] },
+            data: { class: classDataList[nodes.length % classDataList.length], id: `class-${nodes.length}` },
         };
         setNodes((nds) => nds.concat(newClassNode))
     }
@@ -147,14 +170,16 @@ const ClassDiagramCanvas = () => {
 
 
     // Handler passed to the EdgeTypeMenu
-    const handleSelectEdgeType = (edgeId: string, type: EdgeTypes) => {
+    const handleSelectEdgeType = (edgeId: string, type: RelationshipType) => {
         setEdges((eds) =>
             eds.map((edge) => {
                 if (edge.id === edgeId) {
-                    // Properly update the data.type property
                     return {
                         ...edge,
-                        data: { ...(edge.data || {}), type: type }
+                        data: {
+                            ...edge.data,
+                            type: type,
+                        },
                     };
                 }
                 return edge;
@@ -190,6 +215,9 @@ const ClassDiagramCanvas = () => {
                 <Controls>
                     <Button variant="contained" onClick={addClassNode} className=''>
                         Add Class Node
+                    </Button>
+                    <Button variant='contained' onClick={() => saveDiagram()} className=''>
+                        Save
                     </Button>
                 </Controls>
                 {menu && (
