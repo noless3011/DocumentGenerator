@@ -13,9 +13,9 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
     useEffect(() => {
         window.myAPI.readFileAsText(fileDir).then((data: string) => {
             const jsonData = JSON.parse(data);
-
+            console.log("jsonnnnnnnnnnn", jsonData);
             if (jsonData.diagramType === "UML Class Diagram") {
-                console.log(jsonData);
+
                 const classDiagram = ClassDiagram.fromJSON(jsonData);
                 setDiagram(<div className="p-4 w-[1500px] h-[800px]"><ReactFlowProvider><ClassDiagramCanvas diagram={classDiagram} fileDir={fileDir}></ClassDiagramCanvas></ReactFlowProvider></div>);
             }

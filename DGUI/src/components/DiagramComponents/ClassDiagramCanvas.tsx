@@ -44,18 +44,20 @@ const ClassDiagramToNodesAndEdges = (classDiagram: ClassDiagram) => {
         data: { class: classData, id: `class-${index}` },
     }));
 
-    const edges: Edge<{ relation: Relationship }>[] = classDiagram.relationships.map((relationship, index) => ({
+    const edges: Edge<{ relationship: Relationship }>[] = classDiagram.relationships.map((relationship, index) => ({
         id: `edge-${index}`,
         source: `class-${classDiagram.classes.findIndex(c => c.name === relationship.fromClass)}`,
         target: `class-${classDiagram.classes.findIndex(c => c.name === relationship.toClass)}`,
         type: 'default',
         data: {
-            type: relationship.type,
-            fromMultiplicity: relationship.fromMultiplicity,
-            toMultiplicity: relationship.toMultiplicity,
-            fromClass: relationship.fromClass,
-            toClass: relationship.toClass
-        },
+            relationship: {
+                type: relationship.type,
+                fromMultiplicity: relationship.fromMultiplicity,
+                toMultiplicity: relationship.toMultiplicity,
+                fromClass: relationship.fromClass,
+                toClass: relationship.toClass
+            } as Relationship,
+        }
     }));
 
     return { nodes, edges };
