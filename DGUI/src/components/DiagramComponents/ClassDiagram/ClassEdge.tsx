@@ -1,42 +1,127 @@
-import { getBezierPath, BaseEdge, type EdgeProps, type Edge, useInternalNode, InternalNode, Node, Position, EdgeLabelRenderer } from '@xyflow/react';
-import { RelationshipType, type Relationship } from '../../../models/ClassDiagram';
+import React, { useState, useRef, useEffect } from 'react';
+import { getBezierPath, BaseEdge, EdgeProps, Edge, useInternalNode, Position, EdgeLabelRenderer } from '@xyflow/react';
+import { RelationshipType, Relationship } from '../../../models/ClassDiagram';
+import { useDiagramContext } from './DiagramProvider';
 import '@xyflow/react/dist/base.css';
 
-// Update the edge data type to match the Relationship type in ClassDiagram
-type ClassEdgeProps = Edge<{ relationship: Relationship }, 'default'>;
+type ClassEdgeData = {
+    relationship: Relationship;
+};
 
-// --- Helper functions (keep as they are, they handle floating connections well) ---
+type ClassEdge = Edge<ClassEdgeData, 'default'>;
 
-function getCenter(node: InternalNode<Node>) {
-    // Ensure dimensions are available, provide defaults if not
+// Marker IDs definition
+const MARKER_IDS = {
+    hollowTriangle: 'uml-hollow-triangle',
+    hollowDiamond: 'uml-hollow-diamond',
+    filledDiamond: 'uml-filled-diamond',
+    openArrow: 'uml-open-arrow',
+};
+
+// Helper function to render multiplicity labels
+const renderMultiplicityLabel = (
+    multiplicity: string | undefined,
+    position: { x: number, y: number },
+    editing: boolean,
+    value: string,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    onClick: () => void,
+    onBlur: () => void,
+    onKeyDown: (e: React.KeyboardEvent) => void,
+    inputRef: React.RefObject<HTMLInputElement>
+) => {
+    if (editing) {
+        return (
+            <EdgeLabelRenderer>
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={value}
+                    onChange={onChange}
+                    onBlur={onBlur}
+                    onKeyDown={onKeyDown}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 bg-white px-0.5 py-[1px] rounded text-xs font-normal border border-blue-500 z-[1000] min-w-[20px] nodrag nopan pointer-events-auto focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    style={{
+                        transform: `translate(-50%, -50%) translate(${position.x}px,${position.y}px)`,
+                    }}
+                    autoFocus
+                />
+            </EdgeLabelRenderer>
+        );
+    }
+
+    return (
+        <EdgeLabelRenderer>
+            <div
+                className="absolute -translate-x-1/2 -translate-y-1/2 bg-white px-1.5 py-0.5 rounded text-xs font-medium cursor-pointer border border-gray-400 shadow-sm z-[1000] min-w-[20px] min-h-[16px] text-center select-none pointer-events-auto nodrag nopan hover:bg-gray-50 hover:scale-110 transition-transform duration-150"
+                style={{
+                    transform: `translate(-50%, -50%) translate(${position.x}px,${position.y}px)`,
+                }}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    console.log('Multiplicity label clicked!');
+                    onClick();
+                }}
+            >
+                {multiplicity || '*'}
+            </div>
+        </EdgeLabelRenderer>
+    );
+};
+
+// Determine edge style based on relationship type
+const getEdgeStyle = (edgeType: RelationshipType, style?: React.CSSProperties) => {
+    let strokeDasharray = 'none';
+    let markerStartUrl = '';
+    let markerEndUrl = '';
+
+    switch (edgeType) {
+        case RelationshipType.Inheritance:
+            markerEndUrl = `url(#${MARKER_IDS.hollowTriangle})`;
+            break;
+        case RelationshipType.Realization:
+            markerEndUrl = `url(#${MARKER_IDS.hollowTriangle})`;
+            strokeDasharray = '5, 5';
+            break;
+        case RelationshipType.Dependency:
+            markerEndUrl = `url(#${MARKER_IDS.openArrow})`;
+            strokeDasharray = '5, 5';
+            break;
+        case RelationshipType.Aggregation:
+            markerStartUrl = `url(#${MARKER_IDS.hollowDiamond})`;
+            break;
+        case RelationshipType.Composition:
+            markerStartUrl = `url(#${MARKER_IDS.filledDiamond})`;
+            break;
+        // Association and default case - simple line
+    }
+
+    return { strokeDasharray, markerStartUrl, markerEndUrl };
+};
+
+// Calculate node center
+const getCenter = (node: any) => {
     const width = node.measured?.width ?? node.width ?? 0;
     const height = node.measured?.height ?? node.height ?? 0;
     const x = node.internals.positionAbsolute.x ?? 0;
     const y = node.internals.positionAbsolute.y ?? 0;
 
-    return {
-        x: x + width / 2,
-        y: y + height / 2,
-    }
-}
+    return { x: x + width / 2, y: y + height / 2 };
+};
 
-function getHandleCoordsByPosition(node: InternalNode<Node>, handlePosition: Position) {
-    // Defensive checks for node internals
+// Get handle coordinates by position
+const getHandleCoordsByPosition = (node: any, handlePosition: Position) => {
     if (!node?.internals?.handleBounds?.source || !node.internals.positionAbsolute || !node.measured) {
-        console.warn('Node data incomplete for getHandleCoordsByPosition:', node);
-        // Return center as a fallback
         const center = getCenter(node);
         return [center.x, center.y];
     }
 
-    // all handles are from type source, that's why we use handleBounds.source here
     const handle = node.internals.handleBounds.source.find(
-        (h) => h.position === handlePosition,
+        (h: any) => h.position === handlePosition,
     );
 
-    // Fallback if specific handle position isn't found (e.g., node definition missing handles)
     if (!handle) {
-        // Fallback to using the node center or edge
         const center = getCenter(node);
         const width = node.measured.width ?? 0;
         const height = node.measured.height ?? 0;
@@ -48,16 +133,13 @@ function getHandleCoordsByPosition(node: InternalNode<Node>, handlePosition: Pos
             case Position.Right: return [absX + width, center.y];
             case Position.Top: return [center.x, absY];
             case Position.Bottom: return [center.x, absY + height];
-            default: return [center.x, center.y]; // Should not happen
+            default: return [center.x, center.y];
         }
     }
 
     let offsetX = handle.width / 2;
     let offsetY = handle.height / 2;
 
-    // this is a tiny detail to make the markerEnd of an edge visible.
-    // The handle position that gets calculated has the origin top-left, so depending which side we are using, we add a little offset
-    // when the handlePosition is Position.Right for example, we need to add an offset as big as the handle itself in order to get the correct position
     switch (handlePosition) {
         case Position.Left:
             offsetX = 0;
@@ -77,10 +159,10 @@ function getHandleCoordsByPosition(node: InternalNode<Node>, handlePosition: Pos
     const y = node.internals.positionAbsolute.y + handle.y + offsetY;
 
     return [x, y];
-}
+};
 
-// Calculates the closest side of a node for connection
-function getClosestSide(source: InternalNode<Node>, target: InternalNode<Node>): Position {
+// Determine closest side for connection
+const getClosestSide = (source: any, target: any): Position => {
     const centerSource = getCenter(source);
     const centerTarget = getCenter(target);
 
@@ -92,41 +174,118 @@ function getClosestSide(source: InternalNode<Node>, target: InternalNode<Node>):
     } else {
         return centerSource.y > centerTarget.y ? Position.Top : Position.Bottom;
     }
-}
+};
 
-export function getEdgeParams(sourceNode: InternalNode<Node>, targetNode: InternalNode<Node>) {
+// Get edge parameters
+const getEdgeParams = (sourceNode: any, targetNode: any) => {
     const sourcePos = getClosestSide(sourceNode, targetNode);
-    const targetPos = getClosestSide(targetNode, sourceNode); // Use the *opposite* perspective for the target
+    const targetPos = getClosestSide(targetNode, sourceNode);
 
     const [sx, sy] = getHandleCoordsByPosition(sourceNode, sourcePos);
     const [tx, ty] = getHandleCoordsByPosition(targetNode, targetPos);
 
-    return {
-        sx,
-        sy,
-        tx,
-        ty,
-        sourcePos,
-        targetPos,
-    };
+    return { sx, sy, tx, ty, sourcePos, targetPos };
+};
+
+// Position multiplicity labels
+const getMultiplicityPosition = (x: number, y: number, handlePosition: Position, offset: number = 15) => {
+    switch (handlePosition) {
+        case Position.Left:
+            return { x: x - offset, y };
+        case Position.Right:
+            return { x: x + offset, y };
+        case Position.Top:
+            return { x, y: y - offset };
+        case Position.Bottom:
+            return { x, y: y + offset };
+        default:
+            return { x, y };
+    }
 }
 
-// --- Custom Edge Component ---
 
-export default function ClassEdge({
-    id,
-    source,
-    target,
-    data,
-    style, // Pass standard style props
-    interactionWidth = 10, // Default interaction width
-}: ClassEdgeProps) {
+const ClassEdge = ({ id, source, target, data, style, interactionWidth = 10 }: EdgeProps<ClassEdge>) => {
     const sourceNode = useInternalNode(source);
     const targetNode = useInternalNode(target);
+    const { updateRelationship } = useDiagramContext();
 
-    if (!sourceNode?.internals?.positionAbsolute || !targetNode?.internals?.positionAbsolute || !sourceNode.measured || !targetNode.measured) {
-        // Nodes or their positions/dimensions aren't fully initialized yet
-        return null;
+    // Add state for editing multiplicity
+    const [editingSource, setEditingSource] = useState(false);
+    const [editingTarget, setEditingTarget] = useState(false);
+    const [sourceMultiplicityValue, setSourceMultiplicityValue] = useState(data?.relationship.fromMultiplicity || '');
+    const [targetMultiplicityValue, setTargetMultiplicityValue] = useState(data?.relationship.toMultiplicity || '');
+
+    const sourceInputRef = useRef<HTMLInputElement>(null);
+    const targetInputRef = useRef<HTMLInputElement>(null);
+
+    // Update local state when props change
+    useEffect(() => {
+        setSourceMultiplicityValue(data?.relationship.fromMultiplicity || '');
+        setTargetMultiplicityValue(data?.relationship.toMultiplicity || '');
+    }, [data?.relationship.fromMultiplicity, data?.relationship.toMultiplicity]);
+
+    // Handle click outside to end editing
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (sourceInputRef.current && !sourceInputRef.current.contains(event.target as Node)) {
+                saveSourceEdit();
+            }
+            if (targetInputRef.current && !targetInputRef.current.contains(event.target as Node)) {
+                saveTargetEdit();
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [sourceMultiplicityValue, targetMultiplicityValue]);
+
+    // Save handlers
+    const saveSourceEdit = () => {
+        if (editingSource) {
+            setEditingSource(false);
+            if (data?.relationship.fromMultiplicity !== sourceMultiplicityValue) {
+                updateRelationship(id, {
+                    fromMultiplicity: sourceMultiplicityValue
+                });
+            }
+        }
+    };
+
+    const saveTargetEdit = () => {
+        if (editingTarget) {
+            setEditingTarget(false);
+            if (data?.relationship.toMultiplicity !== targetMultiplicityValue) {
+                updateRelationship(id, {
+                    toMultiplicity: targetMultiplicityValue
+                });
+            }
+        }
+    };
+
+    // Key handlers
+    const handleSourceKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            saveSourceEdit();
+        } else if (e.key === 'Escape') {
+            setEditingSource(false);
+            setSourceMultiplicityValue(data?.relationship.fromMultiplicity || '');
+        }
+    };
+
+    const handleTargetKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            saveTargetEdit();
+        } else if (e.key === 'Escape') {
+            setEditingTarget(false);
+            setTargetMultiplicityValue(data?.relationship.toMultiplicity || '');
+        }
+    };
+
+    if (!sourceNode?.internals?.positionAbsolute || !targetNode?.internals?.positionAbsolute ||
+        !sourceNode.measured || !targetNode.measured) {
+        return null; // Nodes not fully initialized yet
     }
 
     const { sx, sy, tx, ty, sourcePos, targetPos } = getEdgeParams(sourceNode, targetNode);
@@ -138,135 +297,96 @@ export default function ClassEdge({
         targetPosition: targetPos,
         targetX: tx,
         targetY: ty,
-        curvature: 0.2, // Adjust curvature as needed
+        curvature: 0.2,
     });
 
-    // Determine style and markers based on edge type
-    const edgeType = data?.relationship.type ?? RelationshipType.Association; // Default to Association
-    let strokeDasharray = 'none';
-    let markerStartUrl = '';
-    let markerEndUrl = '';
-
-    // Define marker IDs
-    const markerIds = {
-        hollowTriangle: 'uml-hollow-triangle',
-        hollowDiamond: 'uml-hollow-diamond',
-        filledDiamond: 'uml-filled-diamond',
-        openArrow: 'uml-open-arrow',
-    }
-
-    switch (edgeType) {
-        case RelationshipType.Inheritance:
-            markerEndUrl = `url(#${markerIds.hollowTriangle})`;
-            break;
-        case RelationshipType.Realization:
-            markerEndUrl = `url(#${markerIds.hollowTriangle})`;
-            strokeDasharray = '5, 5'; // Dashed line
-            break;
-        case RelationshipType.Dependency:
-            markerEndUrl = `url(#${markerIds.openArrow})`;
-            strokeDasharray = '5, 5'; // Dashed line
-            break;
-        case RelationshipType.Aggregation:
-            // Aggregation diamond is at the SOURCE
-            markerStartUrl = `url(#${markerIds.hollowDiamond})`;
-            break;
-        case RelationshipType.Composition:
-            // Composition diamond is at the SOURCE
-            markerStartUrl = `url(#${markerIds.filledDiamond})`;
-            break;
-        case RelationshipType.Association:
-        default:
-            // Simple line, no marker for basic association
-            break;
-    }
+    // Style and markers based on relationship type
+    const edgeType = data?.relationship.type ?? RelationshipType.Association;
+    const edgeStyle = getEdgeStyle(edgeType, style);
 
     // Calculate positions for multiplicity labels
-    // Position near the start and end of the path
     const sourceMultiplicityPos = getMultiplicityPosition(sx, sy, sourcePos, 15);
     const targetMultiplicityPos = getMultiplicityPosition(tx, ty, targetPos, 15);
 
     return (
         <>
-            {/* Define all potential markers in one <defs> block */}
+            {/* Define all markers */}
             <defs>
-                {/* Hollow Triangle (Inheritance, Realization) - points TO target */}
+                {/* Hollow Triangle (Inheritance, Realization) */}
                 <marker
-                    id={markerIds.hollowTriangle}
+                    id={MARKER_IDS.hollowTriangle}
                     viewBox="0 0 20 20"
-                    markerWidth="15" // Size of the marker
+                    markerWidth="15"
                     markerHeight="15"
-                    refX="19" // Position the tip at the very end of the path
-                    refY="10" // Center vertically
-                    orient="auto-start-reverse" // Aligns with the path direction at the end
+                    refX="19"
+                    refY="10"
+                    orient="auto-start-reverse"
                 >
                     <path d="M 1 1 L 19 10 L 1 19 z" fill={style?.stroke ?? 'white'} stroke={style?.stroke ?? 'black'} strokeWidth="1.5" />
                 </marker>
 
-                {/* Open Arrow (Dependency) - points TO target */}
+                {/* Open Arrow (Dependency) */}
                 <marker
-                    id={markerIds.openArrow}
+                    id={MARKER_IDS.openArrow}
                     viewBox="0 0 20 20"
                     markerWidth="12"
                     markerHeight="12"
-                    refX="19" // Position the tip at the very end
+                    refX="19"
                     refY="10"
                     orient="auto-start-reverse"
                 >
                     <path d="M 1 1 L 19 10 L 1 19" fill="none" stroke={style?.stroke ?? 'black'} strokeWidth="1.5" />
                 </marker>
 
-                {/* Hollow Diamond (Aggregation) - at SOURCE */}
+                {/* Hollow Diamond (Aggregation) */}
                 <marker
-                    id={markerIds.hollowDiamond}
-                    viewBox="0 0 20 20"
-                    markerWidth="16" // Slightly larger diamond
-                    markerHeight="16"
-                    refX="1"   // Position the leftmost point (base) at the start of the path
-                    refY="10"  // Center vertically
-                    orient="auto" // Aligns with the path direction at the start
-                >
-                    {/* Rotated diamond path: M 10 1 L 19 10 L 10 19 L 1 10 z */}
-                    <path d="M 10 1 L 19 10 L 10 19 L 1 10 z" fill={'white'} stroke={style?.stroke ?? 'black'} strokeWidth="1.5" />
-                </marker>
-
-                {/* Filled Diamond (Composition) - at SOURCE */}
-                <marker
-                    id={markerIds.filledDiamond}
+                    id={MARKER_IDS.hollowDiamond}
                     viewBox="0 0 20 20"
                     markerWidth="16"
                     markerHeight="16"
-                    refX="1"   // Position the leftmost point (base) at the start
+                    refX="1"
                     refY="10"
                     orient="auto"
                 >
-                    {/* Same path as hollow diamond */}
-                    <path d="M 10 1 L 19 10 L 10 19 L 1 10 z" fill={'black'} stroke={style?.stroke ?? 'black'} strokeWidth="1.5" />
+                    <path d="M 10 1 L 19 10 L 10 19 L 1 10 z" fill="white" stroke={style?.stroke ?? 'black'} strokeWidth="1.5" />
+                </marker>
+
+                {/* Filled Diamond (Composition) */}
+                <marker
+                    id={MARKER_IDS.filledDiamond}
+                    viewBox="0 0 20 20"
+                    markerWidth="16"
+                    markerHeight="16"
+                    refX="1"
+                    refY="10"
+                    orient="auto"
+                >
+                    <path d="M 10 1 L 19 10 L 10 19 L 1 10 z" fill="black" stroke={style?.stroke ?? 'black'} strokeWidth="1.5" />
                 </marker>
             </defs>
 
-            {/* Invisible wider path for easier interaction */}
+            {/* Invisible path for better interaction */}
             <path
                 id={id + '-interaction'}
                 d={edgePath}
                 fill="none"
-                strokeOpacity={0} // Make transparent
+                strokeOpacity={0}
                 strokeWidth={interactionWidth}
                 className="react-flow__edge-interaction"
             />
 
-            {/* Visible Edge Path */}
+            {/* Visible edge path */}
             <path
                 id={id}
                 className="react-flow__edge-path"
                 d={edgePath}
-                strokeDasharray={strokeDasharray}
-                markerStart={markerStartUrl}
-                markerEnd={markerEndUrl}
-                style={style} // Apply standard styles (stroke color, width etc.)
+                strokeDasharray={edgeStyle.strokeDasharray}
+                markerStart={edgeStyle.markerStartUrl}
+                markerEnd={edgeStyle.markerEndUrl}
+                style={style}
             />
 
-            {/* Relationship Type Label */}
+            {/* Relationship type label */}
             <EdgeLabelRenderer>
                 <div
                     style={{
@@ -284,60 +404,31 @@ export default function ClassEdge({
                 </div>
             </EdgeLabelRenderer>
 
-            {/* Multiplicity Labels */}
-            {data.relationship.fromMultiplicity && (
-                <EdgeLabelRenderer>
-                    <div
-                        style={{
-                            position: 'absolute',
-                            transform: `translate(-50%, -50%) translate(${sourceMultiplicityPos.x}px,${sourceMultiplicityPos.y}px)`,
-                            background: '#ffffff',
-                            padding: '1px 3px',
-                            borderRadius: 3,
-                            fontSize: 8,
-                            fontWeight: 400,
-                        }}
-                        className="nodrag nopan"
-                    >
-                        {data.relationship.fromMultiplicity}
-                    </div>
-                </EdgeLabelRenderer>
+            {/* Multiplicity labels */}
+            {renderMultiplicityLabel(
+                data.relationship.fromMultiplicity,
+                sourceMultiplicityPos,
+                editingSource,
+                sourceMultiplicityValue,
+                (e) => setSourceMultiplicityValue(e.target.value),
+                () => setEditingSource(true),
+                saveSourceEdit,
+                handleSourceKeyDown,
+                sourceInputRef
             )}
-
-            {data.relationship.toMultiplicity && (
-                <EdgeLabelRenderer>
-                    <div
-                        style={{
-                            position: 'absolute',
-                            transform: `translate(-50%, -50%) translate(${targetMultiplicityPos.x}px,${targetMultiplicityPos.y}px)`,
-                            background: '#ffffff',
-                            padding: '1px 3px',
-                            borderRadius: 3,
-                            fontSize: 8,
-                            fontWeight: 400,
-                        }}
-                        className="nodrag nopan"
-                    >
-                        {data.relationship.toMultiplicity}
-                    </div>
-                </EdgeLabelRenderer>
+            {renderMultiplicityLabel(
+                data.relationship.toMultiplicity,
+                targetMultiplicityPos,
+                editingTarget,
+                targetMultiplicityValue,
+                (e) => setTargetMultiplicityValue(e.target.value),
+                () => setEditingTarget(true),
+                saveTargetEdit,
+                handleTargetKeyDown,
+                targetInputRef
             )}
         </>
     );
-}
+};
 
-// Helper to position multiplicity labels
-function getMultiplicityPosition(x: number, y: number, handlePosition: Position, offset: number = 15) {
-    switch (handlePosition) {
-        case Position.Left:
-            return { x: x - offset, y };
-        case Position.Right:
-            return { x: x + offset, y };
-        case Position.Top:
-            return { x, y: y - offset };
-        case Position.Bottom:
-            return { x, y: y + offset };
-        default:
-            return { x, y };
-    }
-}
+export default ClassEdge;
