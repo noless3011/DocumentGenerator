@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import DocumentsHandling from './pages/DocumentsHandlingView';
 import ResultsView from './pages/ResultsView';
 import ProjectManagingMenu from './components/DocumentsHandling/ProjectManagingMenu';
-import { Project } from './components/DocumentsHandling/ProjectManagingMenu';
+import { useProjects } from './provider/ProjectProvider';
 import ClassDiagramCanvas from './components/DiagramComponents/ClassDiagramCanvas';
-import { ReactFlowProvider } from '@xyflow/react';
 import DatabaseDiagramCanvas from './components/DiagramComponents/DatabaseDiagramCanvas';
+
 interface VerticalTabProps {
     label: string;
     icon?: React.ReactNode;
@@ -16,15 +16,12 @@ const VerticalTab: React.FC<VerticalTabProps> = ({ children }) => {
     return <div className="p-4">{children}</div>;
 };
 
-
 const AppContainer: React.FC = () => {
-    const [activateSession, setActivateSession] = useState(false);
     const [activeTab, setActiveTab] = useState(0);
+    const { currentProject } = useProjects();
+
     const switchTab = (index: number) => setActiveTab(index);
-    const [project, setProject] = useState<Project>();
-    const onProjectLoaded = (project: Project) => {
-        setProject(project);
-    }
+
     const tabs = [
         {
             label: "Documents",
@@ -33,7 +30,7 @@ const AppContainer: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
             ),
-            content: <DocumentsHandling switchTab={switchTab} project={project} />
+            content: <DocumentsHandling switchTab={switchTab} />
         },
         {
             label: "Results",
@@ -42,7 +39,7 @@ const AppContainer: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
             ),
-            content: <ResultsView project={project} />
+            content: <ResultsView />
         },
         {
             label: "Settings",
@@ -61,9 +58,10 @@ const AppContainer: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M12 4a8 8 0 100 16 8 8 0 000-16z" />
                 </svg>
             ),
-            content: <div className="p-4 w-[1500px] h-[800px]"><ReactFlowProvider><DatabaseDiagramCanvas></DatabaseDiagramCanvas></ReactFlowProvider></div>
+            content: <div className="p-4 w-[1500px] h-[800px]"><DatabaseDiagramCanvas></DatabaseDiagramCanvas></div>
         }
     ];
+
     // Use provided tabs or fallback to test tabs
     const displayTabs = tabs.length > 0 ? tabs : [];
 
@@ -89,10 +87,9 @@ const AppContainer: React.FC = () => {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 p-6 flex-grow overflow-x-scroll">
-                <div className='flex flex-col'>
-                    <ProjectManagingMenu onProjectLoaded={onProjectLoaded}></ProjectManagingMenu>
-
+            <div className="flex-1 flex-grow overflow-hidden">
+                <div className='flex flex-col p-6 w-full h-full overflow-hidden'>
+                    <ProjectManagingMenu />
                     {displayTabs[activeTab].content}
                 </div>
             </div>

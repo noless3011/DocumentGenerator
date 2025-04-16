@@ -49,6 +49,7 @@ export class ClassDiagram implements IDiagram {
     relationships: Relationship[];
 
     constructor(diagramName: string = '', classes: Class[] = [], relationships: Relationship[] = []) {
+        this.diagramType = 'UML Class Diagram';
         this.diagramName = diagramName;
         this.classes = classes;
         this.relationships = relationships;
@@ -95,6 +96,7 @@ export class ClassDiagram implements IDiagram {
 
     toJSON(): any {
         return {
+            diagramType: this.diagramType,
             diagramName: this.diagramName,
             classes: this.classes,
             relationships: this.relationships

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { getBezierPath, BaseEdge, EdgeProps, Edge, useInternalNode, Position, EdgeLabelRenderer } from '@xyflow/react';
 import { RelationshipType, Relationship } from '../../../models/ClassDiagram';
-import { useDiagramContext } from './DiagramProvider';
+import { useDiagramContext } from '../../../provider/diagram_providers/ClassDiagramProvider';
 import '@xyflow/react/dist/base.css';
 
 type ClassEdgeData = {
@@ -191,13 +191,13 @@ const getEdgeParams = (sourceNode: any, targetNode: any) => {
 const getMultiplicityPosition = (x: number, y: number, handlePosition: Position, offset: number = 15) => {
     switch (handlePosition) {
         case Position.Left:
-            return { x: x - offset, y };
+            return { x: x - offset, y: y + offset };
         case Position.Right:
-            return { x: x + offset, y };
+            return { x: x + offset, y: y - offset };
         case Position.Top:
-            return { x, y: y - offset };
+            return { x: x + offset, y: y - offset };
         case Position.Bottom:
-            return { x, y: y + offset };
+            return { x: x - offset, y: y + offset };
         default:
             return { x, y };
     }
@@ -305,8 +305,8 @@ const ClassEdge = ({ id, source, target, data, style, interactionWidth = 10 }: E
     const edgeStyle = getEdgeStyle(edgeType, style);
 
     // Calculate positions for multiplicity labels
-    const sourceMultiplicityPos = getMultiplicityPosition(sx, sy, sourcePos, 15);
-    const targetMultiplicityPos = getMultiplicityPosition(tx, ty, targetPos, 15);
+    const sourceMultiplicityPos = getMultiplicityPosition(sx, sy, sourcePos, 20);
+    const targetMultiplicityPos = getMultiplicityPosition(tx, ty, targetPos, 20);
 
     return (
         <>

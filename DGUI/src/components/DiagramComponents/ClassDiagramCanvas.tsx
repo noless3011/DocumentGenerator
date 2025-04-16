@@ -15,7 +15,7 @@ import ClassEdge from './ClassDiagram/ClassEdge';
 import { Button } from '@mui/material';
 import EdgeTypeMenu from './ClassDiagram/EdgeTypeMenu';
 import { ClassDiagram, RelationshipType } from '../../models/ClassDiagram';
-import { useDiagramContext, DiagramProvider } from '../DiagramComponents/ClassDiagram/DiagramProvider';
+import { useDiagramContext, ClassDiagramProvider } from '../../provider/diagram_providers/ClassDiagramProvider';
 import { useState } from 'react';
 
 const nodeTypes = {
@@ -53,6 +53,7 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
         onEdgesChange,
         onConnect,
         updateRelationship,
+        flipEdgeDirection,
         deleteEdge,
         addClassNode,
         saveDiagram
@@ -79,6 +80,11 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
         setMenu(null);
     }, [updateRelationship]);
 
+    const handleFlipDirection = useCallback((edgeId: string) => {
+        flipEdgeDirection(edgeId);
+        setMenu(null);
+    }, [edges, updateRelationship]);
+
     const handleDeleteEdge = useCallback((edgeId: string) => {
         deleteEdge(edgeId);
         setMenu(null);
@@ -94,7 +100,7 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
         <>
             <ReactFlow
                 ref={canvas}
-                style={{ backgroundColor: '#f0f0f0' }}
+                style={{ backgroundColor: '#f0f0f0', width: '100%', height: '100%' }}
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
@@ -125,6 +131,7 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
                         left={menu.left}
                         onSelectEdgeType={handleSelectEdgeType}
                         onDeleteEdge={handleDeleteEdge}
+                        onFlipDirection={handleFlipDirection}
                         onClick={(e) => e.stopPropagation()}
                     />
                 )}
@@ -136,9 +143,9 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
 // This is the wrapper component that provides the context
 const ClassDiagramCanvas: React.FC<ClassDiagramCanvasProps> = ({ diagram, fileDir }) => {
     return (
-        <DiagramProvider initialDiagram={diagram}>
+        <ClassDiagramProvider initialDiagram={diagram}>
             <ClassDiagramCanvasInner fileDir={fileDir} />
-        </DiagramProvider>
+        </ClassDiagramProvider>
     );
 };
 

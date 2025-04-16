@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { Project } from 'src/components/DocumentsHandling/ProjectManagingMenu';
+import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { useProjects } from '../provider/ProjectProvider';
 
 interface SheetOption {
     name: string;
@@ -11,10 +11,17 @@ interface SheetOption {
 
 interface DocumentsHandlingProps {
     switchTab: (tabIndex: number) => void;
-    project: Project;
 }
 
-const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, project }) => {
+interface ProjectFile {
+    path: string;
+    name: string;
+    added_date: string;
+    selected?: boolean;
+}
+
+const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
+    const { currentProject, loading } = useProjects();
     const [fileName, setFileName] = useState<string>('');
     const [sheets, setSheets] = useState<SheetOption[]>([]);
     const [previewData, setPreviewData] = useState<any[][]>([]);
@@ -23,14 +30,29 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
     const [processing, setProcessing] = useState<boolean>(false);
     const [processingResults, setProcessingResults] = useState<any>(null);
     const [generating, setGenerating] = useState<boolean>(false);
+    const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+    const [selectedFileIndex, setSelectedFileIndex] = useState<number>(-1);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const workbookRef = useRef<XLSX.WorkBook | null>(null);
+
+    // Load project files when current project changes
+    useEffect(() => {
+        if (currentProject && currentProject.files) {
+            const files = currentProject.files.input.map((file: ProjectFile) => ({
+                ...file,
+                selected: false
+            }));
+            setProjectFiles(files);
+        } else {
+            setProjectFiles([]);
+        }
+    }, [currentProject]);
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        if (!project) {
+        if (!currentProject) {
             alert('Please load or create a project first.');
             return;
         }
@@ -85,9 +107,20 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                 setCurrentPreviewSheet(sheetOptions[0].name);
             }
             alert('File uploaded and sheets loaded successfully!');
-            if (project) {
-                project.base_dir = uploadResult.output_folder;
-            }
+
+            // Update input files array with the new file
+            const now = new Date().toISOString();
+            const newFile = {
+                path: uploadResult.output_folder,
+                name: file.name,
+                added_date: now,
+                selected: true
+            };
+
+            // Add to project files list
+            const updatedFiles = [...projectFiles, newFile];
+            setProjectFiles(updatedFiles);
+            setSelectedFileIndex(updatedFiles.length - 1);
 
         } catch (error) {
             console.error('Error handling file:', error);
@@ -97,8 +130,79 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
         }
     };
 
+    const handleSelectFile = async (index: number) => {
+        setSelectedFileIndex(index);
+        const file = projectFiles[index];
+        setFileName(file.name);
+
+        try {
+            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets-for-file`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ filePath: file.path }),
+                mode: 'cors',
+                credentials: 'include'
+            });
+
+            if (!sheetsResponse.ok) {
+                throw new Error(`Failed to get sheet names: ${sheetsResponse.status}`);
+            }
+
+            const sheetsResult = await sheetsResponse.json();
+            const sheetOptions: SheetOption[] = sheetsResult.sheets.map((name: string) => ({
+                name,
+                selected: true,
+                options: ['UI', 'Table'],
+                selectedOption: 'UI'
+            }));
+
+            setSheets(sheetOptions);
+            if (sheetOptions.length > 0) {
+                handlePreviewSheet(sheetOptions[0].name);
+                setCurrentPreviewSheet(sheetOptions[0].name);
+            }
+        } catch (error) {
+            console.error('Error loading file sheets:', error);
+            alert(error instanceof Error ? error.message : 'An error occurred loading the file');
+        }
+    };
+
+    const toggleFileSelection = (index: number) => {
+        const updatedFiles = [...projectFiles];
+        updatedFiles[index].selected = !updatedFiles[index].selected;
+        setProjectFiles(updatedFiles);
+    };
+
     const handlePreviewSheet = async (sheetName: string) => {
         try {
+            // If a file is selected from project files
+            if (selectedFileIndex >= 0) {
+                const response = await fetch(`http://localhost:5000/preview-sheet`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filePath: projectFiles[selectedFileIndex].path,
+                        sheetName: sheetName
+                    }),
+                    mode: 'cors'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to get sheet data for preview: ${response.status}`);
+                }
+
+                const result = await response.json();
+                setPreviewHeaders(result.headers);
+                setPreviewData(result.data);
+                setCurrentPreviewSheet(sheetName);
+                return;
+            }
+
+            // Fallback to existing method for newly uploaded file
             const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
                 method: 'POST',
                 mode: 'cors'
@@ -146,14 +250,11 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                 alert('Failed to read file for preview. Check console for details.');
             };
             reader.readAsBinaryString(fileInput);
-
-
         } catch (error) {
             console.error('Error previewing sheet:', error);
             alert(error instanceof Error ? error.message : 'An error occurred while trying to preview the sheet.');
         }
     };
-
 
     const handleSheetSelectionChange = (index: number) => {
         const updatedSheets = [...sheets];
@@ -168,11 +269,22 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
     };
 
     const handleProcessSheets = async () => {
-        if (!project) {
+        if (!currentProject) {
             alert('Please create/load a project first.');
             return;
         }
 
+        // Check if files are selected for processing
+        const selectedFiles = projectFiles.filter(file => file.selected);
+        if (selectedFiles.length === 0 && selectedFileIndex === -1) {
+            alert('Please select at least one file to process.');
+            return;
+        }
+
+        // If specific file is selected in preview but not checked, add it to the processing list
+        if (selectedFileIndex >= 0 && !projectFiles[selectedFileIndex].selected) {
+            selectedFiles.push(projectFiles[selectedFileIndex]);
+        }
 
         const selectedSheetTypes = sheets.reduce((acc, sheet) => {
             if (sheet.selected) {
@@ -186,20 +298,22 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
             return;
         }
 
-        const payload = {
+        const filesToProcess = selectedFiles.map(file => ({
+            path: file.path,
+            name: file.name,
             sheets: selectedSheetTypes
-        };
+        }));
 
         try {
             setProcessing(true);
             setProcessingResults(null);
 
-            const response = await fetch('http://localhost:5000/process-excel', {
+            const response = await fetch('http://localhost:5000/process-multiple-files', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(payload),
+                body: JSON.stringify({ files: filesToProcess }),
                 mode: 'cors'
             });
 
@@ -210,8 +324,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
 
             const result = await response.json();
             setProcessingResults(result);
-            alert('Sheets processed successfully!');
-
+            alert('Files processed successfully!');
 
         } catch (error) {
             console.error('Error processing sheets:', error);
@@ -222,8 +335,9 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
     };
 
     const handleGenerateDocuments = async () => {
-        if (!project) {
+        if (!currentProject) {
             alert('Please load or create a project first.');
+            return;
         }
 
         try {
@@ -241,11 +355,9 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                 throw new Error(errorResult.error || `Document generation failed: ${response.status}`);
             }
 
-
             const result = await response.json();
             console.log("Generate Documents Result:", result);
 
-            // alert(`Documents generated successfully! ${result.count} file(s) created in ${result.output_dir}`);
             alert('Documents generated successfully!');
             switchTab(1);
         } catch (error) {
@@ -276,7 +388,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             className="primary-button bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                            disabled={!project}
+                            disabled={!currentProject || loading}
                         >
                             Select File
                         </button>
@@ -284,7 +396,42 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                             {fileName || 'No file selected'}
                         </span>
                     </div>
-                    {!project && <p className="text-red-500 text-xs italic mt-1">Please load/create first to upload file.</p>}
+                    {!currentProject && <p className="text-red-500 text-xs italic mt-1">Please load/create first to upload file.</p>}
+                </div>
+
+                {/* Project Files List */}
+                <div className="project-files-container mb-6">
+                    <p className="section-label text-sm font-medium text-gray-700 mb-2">Project Files</p>
+                    {projectFiles.length === 0 ? (
+                        <p className="no-files-message text-gray-600 italic text-sm">No files in project. Upload an Excel file.</p>
+                    ) : (
+                        <div className="project-files border border-gray-300 rounded p-2 max-h-40 overflow-y-auto">
+                            {projectFiles.map((file, index) => (
+                                <div
+                                    key={index}
+                                    className={`file-item flex items-center justify-between p-2 rounded mb-1 hover:bg-gray-200 ${selectedFileIndex === index ? 'bg-blue-100' : ''}`}
+                                >
+                                    <div className="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={file.selected}
+                                            onChange={() => toggleFileSelection(index)}
+                                            className="mr-2"
+                                        />
+                                        <span
+                                            className="file-name cursor-pointer"
+                                            onClick={() => handleSelectFile(index)}
+                                        >
+                                            {file.name}
+                                        </span>
+                                    </div>
+                                    <span className="text-xs text-gray-500">
+                                        {new Date(file.added_date).toLocaleDateString()}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Sheet List with Options */}
@@ -292,7 +439,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                     <p className="section-label text-sm font-medium text-gray-700 mb-2">Available Sheets</p>
 
                     {sheets.length === 0 ? (
-                        <p className="no-sheets-message text-gray-600 italic text-sm">No sheets available. Please upload an Excel file.</p>
+                        <p className="no-sheets-message text-gray-600 italic text-sm">No sheets available. Please select or upload an Excel file.</p>
                     ) : (
                         <ul className="sheets-list overflow-y-auto border border-gray-300 rounded p-2">
                             {sheets.map((sheet, index) => (
@@ -335,26 +482,26 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                         </ul>
                     )}
 
-                    {sheets.length > 0 && (
+                    {sheets.length > 0 || projectFiles.some(f => f.selected) ? (
                         <div>
                             <button
                                 className="process-button mt-4 bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
                                 onClick={handleProcessSheets}
-                                disabled={processing || !project}
+                                disabled={processing || !currentProject || loading}
                             >
-                                {processing ? 'Processing...' : 'Process Selected Sheets'}
+                                {processing ? 'Processing...' : 'Process Files'}
                             </button>
                             <br></br>
                             <button
                                 className="process-button mt-4 bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
                                 onClick={handleGenerateDocuments}
-                                disabled={generating || !project}
+                                disabled={generating || !currentProject || loading}
                             >
                                 {generating ? 'Asking LLM...' : 'Generate Documents'}
                             </button>
-                            {!project && <p className="text-red-500 text-xs italic mt-1">Please start a session first to process or generate documents.</p>}
+                            {!currentProject && <p className="text-red-500 text-xs italic mt-1">Please start a session first to process or generate documents.</p>}
                         </div>
-                    )}
+                    ) : null}
                 </div>
             </div>
 
@@ -392,7 +539,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab, projec
                         <p className="empty-message text-gray-500 italic">
                             {fileName
                                 ? 'Select a sheet to preview...'
-                                : 'Upload an Excel file to see preview'}
+                                : 'Upload or select an Excel file to see preview'}
                         </p>
                     </div>
                 )}

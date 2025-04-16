@@ -8,6 +8,7 @@ interface EdgeTypeMenuProps extends React.HTMLAttributes<HTMLDivElement> {
     bottom?: number;
     onSelectEdgeType: (edgeId: string, type: RelationshipType) => void;
     onDeleteEdge: (edgeId: string) => void;
+    onFlipDirection: (edgeId: string) => void;
 }
 
 const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
@@ -18,6 +19,7 @@ const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
     bottom,
     onSelectEdgeType,
     onDeleteEdge,
+    onFlipDirection,
     className,
     ...props
 }) => {
@@ -28,8 +30,12 @@ const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
 
     const handleDeleteEdge = useCallback(() => {
         onDeleteEdge(id);
-    }
-        , [id, onDeleteEdge]);
+    }, [id, onDeleteEdge]);
+
+    const handleFlipDirection = useCallback(() => {
+        onFlipDirection(id);
+    }, [id, onFlipDirection]);
+
     const menuStyle: CSSProperties = {
         position: 'absolute',
         top,
@@ -66,6 +72,15 @@ const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
                             <span className="text-sm">{enumValue}</span>
                         </button>
                     ))}
+                {/* swap direction button */}
+                <button
+                    className="flex items-center p-2 hover:bg-gray-100 rounded text-left w-full" // Added text-left and w-full
+                    onClick={() => handleFlipDirection()}
+                >
+                    {/* Display the string value */}
+                    <span className="text-sm">Flip</span>
+                </button>
+
                 {/*delete button */}
                 <button
                     className="flex items-center p-2 hover:bg-gray-100 rounded text-left w-full" // Added text-left and w-full
@@ -74,6 +89,7 @@ const EdgeTypeMenu: React.FC<EdgeTypeMenuProps> = ({
                     {/* Display the string value */}
                     <span className="text-sm text-red-600">Delete</span>
                 </button>
+
             </div>
         </div>
     );

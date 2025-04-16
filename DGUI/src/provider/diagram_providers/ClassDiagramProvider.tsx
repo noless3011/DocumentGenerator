@@ -3,7 +3,7 @@ import {
     Node, Edge, OnNodesChange, OnEdgesChange, OnConnect,
     applyNodeChanges, applyEdgeChanges, addEdge
 } from '@xyflow/react';
-import { Class, Relationship, RelationshipType, ClassDiagram } from '../../../models/ClassDiagram';
+import { Class, Relationship, RelationshipType, ClassDiagram } from '../../models/ClassDiagram';
 
 interface DiagramContextType {
     nodes: Node<{ class: Class, id: string }>[];
@@ -13,8 +13,10 @@ interface DiagramContextType {
     onConnect: OnConnect;
     updateClass: (nodeId: string, classData: Class) => void;
     updateRelationship: (edgeId: string, relationship: Partial<Relationship>) => void;
+    flipEdgeDirection: (edgeId: string) => void;
     deleteEdge: (edgeId: string) => void;
     addClassNode: () => void;
+    deleteClassNode: (nodeId: string) => void;
     saveDiagram: (fileDir: string) => Promise<void>;
     getDiagramData: () => ClassDiagram;
 }
@@ -29,12 +31,12 @@ export function useDiagramContext() {
     return context;
 }
 
-interface DiagramProviderProps {
+interface ClassDiagramProviderProps {
     children: ReactNode;
     initialDiagram: ClassDiagram;
 }
 
-export function DiagramProvider({ children, initialDiagram }: DiagramProviderProps) {
+export function ClassDiagramProvider({ children, initialDiagram }: ClassDiagramProviderProps) {
     // Convert initial diagram to nodes and edges
     const { nodes: initialNodes, edges: initialEdges } = convertDiagramToNodesAndEdges(initialDiagram);
 
@@ -111,6 +113,29 @@ export function DiagramProvider({ children, initialDiagram }: DiagramProviderPro
         );
     }, []);
 
+    const flipEdgeDirection = useCallback((edgeId: string) => {
+        setEdges(edges =>
+            edges.map(edge => {
+                if (edge.id === edgeId) {
+                    return {
+                        ...edge,
+                        source: edge.target,
+                        target: edge.source,
+                        data: {
+                            relationship: {
+                                ...edge.data.relationship,
+                                fromClass: edge.data.relationship.toClass,
+                                toClass: edge.data.relationship.fromClass
+                            }
+                        }
+                    };
+                }
+                return edge;
+            })
+        );
+    }
+        , []);
+
     const deleteEdge = useCallback((edgeId: string) => {
         setEdges(edges => edges.filter(edge => edge.id !== edgeId));
     }, []);
@@ -133,6 +158,12 @@ export function DiagramProvider({ children, initialDiagram }: DiagramProviderPro
         setNodes(nodes => [...nodes, newClassNode]);
     }, [nodes]);
 
+    const deleteClassNode = useCallback((nodeId: string) => {
+        setNodes(nodes => nodes.filter(node => node.id !== nodeId));
+        setEdges(edges => edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId));
+    }
+        , []);
+
     const getDiagramData = useCallback((): ClassDiagram => {
         const classes = nodes.map(node => node.data.class);
         const relationships = edges.map(edge => edge.data.relationship);
@@ -141,7 +172,8 @@ export function DiagramProvider({ children, initialDiagram }: DiagramProviderPro
 
     const saveDiagram = useCallback(async (fileDir: string) => {
         const diagram = getDiagramData();
-        diagram.diagramType = 'UML Class Diagram'; // Ensure the diagram type is set correctly
+        // Add diagramType to the diagram object at the beginning
+
         const json = JSON.stringify(diagram, null, 2);
 
         try {
@@ -162,8 +194,10 @@ export function DiagramProvider({ children, initialDiagram }: DiagramProviderPro
             onConnect,
             updateClass,
             updateRelationship,
+            flipEdgeDirection,
             deleteEdge,
             addClassNode,
+            deleteClassNode,
             saveDiagram,
             getDiagramData
         }}>

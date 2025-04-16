@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Add as AddIcon, Refresh as RefreshIcon, FolderOpen as FolderIcon } from '@mui/icons-material';
 import {
     Button, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -6,29 +6,8 @@ import {
     TextField, Typography, IconButton, Divider, Box, CircularProgress,
     InputAdornment
 } from '@mui/material';
-
-export interface Project {
-    id: string;
-    name: string;
-    base_dir: string;
-    project_dir?: string;
-    created_date: string; // ISO date string format
-    modified_date: string; // ISO date string format
-    description?: string;
-    tags?: string[];
-    files?: {
-        input: Array<{ path: string, name: string, added_date: string }>;
-        processed: Array<{ path: string, name: string, added_date: string }>;
-        output: Array<{ path: string, name: string, added_date: string }>;
-    };
-    processing_history?: Array<{
-        timestamp: string;
-        operation: string;
-        input_files: string[];
-        output_files: string[];
-        details: Record<string, any>;
-    }>;
-}
+import { Project } from '../../models/Project';
+import { useProjects } from '../../provider/ProjectProvider';
 
 interface ProjectManagingMenuProps {
     onProjectLoaded?: (project: Project) => void;
@@ -36,26 +15,30 @@ interface ProjectManagingMenuProps {
 
 const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoaded }) => {
     const [open, setOpen] = useState(false);
-    const [projects, setProjects] = useState<Project[]>([]);
     const [newProjectName, setNewProjectName] = useState('');
     const [baseDir, setBaseDir] = useState('');
-    const [currentProject, setCurrentProject] = useState<Project | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const {
+        projects,
+        currentProject,
+        loading,
+        error,
+        fetchProjects,
+        createProject,
+        loadProject,
+        closeProject
+    } = useProjects();
+
     const handleSelectDirectory = async () => {
         try {
-            // Call your existing IPC function to open folder dialog
-            // Replace this with your actual function call
             const selectedPath = await window.myAPI.selectFolder();
-
             if (selectedPath) {
                 setBaseDir(selectedPath);
             }
         } catch (err) {
             console.error('Error selecting directory:', err);
-            setError('Failed to select directory');
         }
     };
+
     const handleOpen = () => {
         setOpen(true);
         fetchProjects();
@@ -63,167 +46,51 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
 
     const handleClose = () => {
         setOpen(false);
-        setError(null);
     };
 
-    const fetchProjects = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const response = await fetch('http://localhost:5000/list-projects');
-            const data = await response.json();
-            if (response.ok) {
-                setProjects(data.projects || []);
-            } else {
-                setError(data.error || 'Failed to fetch projects');
-            }
-        } catch (err) {
-            setError('Network error when fetching projects');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchCurrentProject = async () => {
-        try {
-            const response = await fetch('http://localhost:5000/project-details');
-            const data = await response.json();
-            
-            if (response.ok) {
-                setCurrentProject(data);
-            } else {
-                // This is expected when no project is loaded
-                setCurrentProject(null);
-                // Don't show an error for this case - it's normal to have no project loaded initially
-                console.log("No active project. This is normal if no project has been loaded yet.");
-            }
-        } catch (err) {
-            setCurrentProject(null);
-            console.error("Error fetching current project:", err);
-        }
-    };
-
-    const createProject = async () => {
-        if (!newProjectName.trim()) {
-            setError('Project name cannot be empty');
+    const handleCreateProject = async () => {
+        if (!newProjectName.trim() || !baseDir.trim()) {
             return;
         }
 
-        if (!baseDir.trim()) {
-            setError('Base directory cannot be empty');
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
         try {
-            const response = await fetch('http://localhost:5000/create-project', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    project_name: newProjectName,
-                    base_dir: baseDir
-                }),
+            const project = await createProject({
+                project_name: newProjectName,
+                base_dir: baseDir
             });
-            const data = await response.json();
-            if (response.ok) {
-                setNewProjectName('');
-                setBaseDir('');
-                fetchProjects();
-                const project: Project = {
-                    id: data.project_id,
-                    name: newProjectName,
-                    base_dir: baseDir,
-                    created_date: data.created_date,
-                    modified_date: data.modified_date
-                };
-                // Update current project from response
-                if (onProjectLoaded) {
-                    onProjectLoaded(project);
-                }
-                handleClose();
-            } else {
-                setError(data.error || 'Failed to create project');
+
+            setNewProjectName('');
+            setBaseDir('');
+
+            if (onProjectLoaded) {
+                onProjectLoaded(project);
             }
+
+            handleClose();
         } catch (err) {
-            setError('Network error when creating project');
-            console.error(err);
-        } finally {
-            setLoading(false);
+            console.error('Error creating project:', err);
         }
     };
 
-    const loadProject = async (projectId: string) => {
-        setLoading(true);
-        setError(null);
+    const handleLoadProject = async (projectId: string) => {
         try {
-            const response = await fetch(`http://localhost:5000/load-project/${projectId}`, {
-                method: 'POST',
-            });
-            const data = await response.json();
-            
-            if (response.ok) {
-                // Create a proper project object with all required fields
-                const project: Project = {
-                    id: data.project_id,
-                    name: data.project_name,
-                    base_dir: data.base_dir || projects.find(p => p.id === projectId)?.base_dir || '',
-                    project_dir: data.project_dir,
-                    created_date: data.created_date || new Date().toISOString(),
-                    modified_date: data.modified_date || new Date().toISOString()
-                };
-                
-                setCurrentProject(project);
-                
-                if (onProjectLoaded) {
-                    onProjectLoaded(project);
-                }
-                
-                handleClose();
-            } else {
-                setError(data.error || 'Failed to load project');
+            await loadProject(projectId);
+
+            if (currentProject && onProjectLoaded) {
+                onProjectLoaded(currentProject);
             }
+
+            handleClose();
         } catch (err) {
-            setError('Network error when loading project');
-            console.error(err);
-        } finally {
-            setLoading(false);
+            console.error('Error loading project:', err);
         }
     };
 
-    const closeProject = async () => {
-        setLoading(true);
-        setError(null);
+    const handleCloseProject = async () => {
         try {
-            const response = await fetch('http://localhost:5000/close-project', {
-                method: 'POST',
-            });
-            const data = await response.json();
-            if (response.ok) {
-                setCurrentProject(null);
-            } else {
-                setError(data.error || 'Failed to close project');
-            }
+            await closeProject();
         } catch (err) {
-            setError('Network error when closing project');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchCurrentProject();
-    }, []);
-
-    const formatDate = (timestamp: number) => {
-        try {
-            return new Date(timestamp * 1000).toLocaleDateString();
-        } catch (e) {
-            return 'Invalid date';
+            console.error('Error closing project:', err);
         }
     };
 
@@ -264,7 +131,7 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
                                 {currentProject.name} (ID: {currentProject.id})
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
-                                Directory: {currentProject.base_dir}
+                                Directory: {currentProject.directories.base}
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
                                 Created: {currentProject.created_date}
@@ -275,7 +142,7 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
                             <Button
                                 variant="outlined"
                                 color="secondary"
-                                onClick={closeProject}
+                                onClick={handleCloseProject}
                                 disabled={loading}
                             >
                                 Close Project
@@ -306,28 +173,26 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
                                 disabled={loading}
                                 margin="normal"
                                 helperText="Directory where the project will be stored"
-                                slotProps={{
-                                    input: {
-                                        endAdornment: (
-                                            <InputAdornment position="end">
-                                                <IconButton
-                                                    onClick={handleSelectDirectory}
-                                                    disabled={loading}
-                                                    edge="end"
-                                                    aria-label="select folder"
-                                                >
-                                                    <FolderIcon />
-                                                </IconButton>
-                                            </InputAdornment>
-                                        )
-                                    }
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <IconButton
+                                                onClick={handleSelectDirectory}
+                                                disabled={loading}
+                                                edge="end"
+                                                aria-label="select folder"
+                                            >
+                                                <FolderIcon />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    )
                                 }}
                             />
                             <Button
                                 variant="contained"
                                 color="primary"
                                 startIcon={<AddIcon />}
-                                onClick={createProject}
+                                onClick={handleCreateProject}
                                 disabled={loading || !newProjectName.trim() || !baseDir.trim()}
                                 sx={{ mt: 2 }}
                             >
@@ -357,7 +222,7 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
                                         <Button
                                             variant="outlined"
                                             color="primary"
-                                            onClick={() => loadProject(project.id)}
+                                            onClick={() => handleLoadProject(project.id)}
                                             disabled={loading}
                                         >
                                             Load
@@ -369,7 +234,7 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
                                         secondary={
                                             <>
                                                 <Typography variant="body2" component="span" display="block">
-                                                    Directory: {project.base_dir}
+                                                    Directory: {project.directories?.base || "N/A"}
                                                 </Typography>
                                                 <Typography variant="body2" component="span">
                                                     Created: {project.created_date} | Modified: {project.modified_date}

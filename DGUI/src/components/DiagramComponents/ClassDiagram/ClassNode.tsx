@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { NodeProps, Position, Handle, NodeResizer, Node } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import { Class, Attribute, Method } from "../../../models/ClassDiagram";
-import { useDiagramContext } from '../../DiagramComponents/ClassDiagram/DiagramProvider';
+import { useDiagramContext } from '../../../provider/diagram_providers/ClassDiagramProvider';
 
 type ClassNode = Node<{ class: Class }, 'class'>;
 
 const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
-    const { updateClass } = useDiagramContext();
+    const { updateClass, deleteClassNode, edges, deleteEdge } = useDiagramContext();
 
     const [localClass, setLocalClass] = useState<Class>(data.class);
     const [isAttributesExpanded, setIsAttributesExpanded] = useState(true);
@@ -123,6 +123,16 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
         setIsExpanded(!isExpanded);
     };
 
+    const handleDeleteNode = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent node selection when clicking the button
+        // find relationships connected to this node
+        const connectedEdges = edges.filter(edge => edge.source === id || edge.target === id);
+        // delete the relationships
+        connectedEdges.forEach(edge => {
+            deleteEdge(edge.id);
+        });
+        deleteClassNode(id);
+    };
     // Render compact view
     if (!isExpanded) {
         return (
@@ -137,11 +147,17 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
                 <div className="relative">
                     <div className="drag-handle_custom h-6 bg-blue-500 cursor-move"></div>
                     <button
-                        className="nodrag absolute right-1 top-1 bg-blue-600 hover:bg-blue-700 text-white rounded w-4 h-4 flex items-center justify-center text-xs focus:outline-none"
+                        className="nodrag absolute left-1 top-1 bg-blue-600 hover:bg-blue-700 text-white rounded w-4 h-4 flex items-center justify-center text-xs focus:outline-none"
                         onClick={toggleExpanded}
                         title="Expand node"
                     >
                         ⤢
+                    </button>
+                    <button
+                        className="nodrag absolute right-1 top-1 bg-red-600 hover:bg-red-700 text-white rounded w-4 h-4 flex items-center justify-center text-xs focus:outline-none"
+                        onClick={handleDeleteNode}
+                        title="Delete node">
+                        X
                     </button>
                 </div>
 
@@ -214,11 +230,17 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
                 <div className="relative">
                     <div className="drag-handle_custom h-6 bg-blue-500 cursor-move"></div>
                     <button
-                        className="nodrag absolute right-1 top-1 bg-blue-600 hover:bg-blue-700 text-white rounded w-4 h-4 flex items-center justify-center text-xs focus:outline-none"
+                        className="nodrag absolute left-1 top-1 bg-blue-600 hover:bg-blue-700 text-white rounded w-4 h-4 flex items-center justify-center text-xs focus:outline-none"
                         onClick={toggleExpanded}
                         title="Collapse node"
                     >
                         ⤡
+                    </button>
+                    <button
+                        className="nodrag absolute right-1 top-1 bg-red-600 hover:bg-red-700 text-white rounded w-4 h-4 flex items-center justify-center text-xs focus:outline-none"
+                        onClick={handleDeleteNode}
+                        title="Delete node">
+                        X
                     </button>
                 </div>
 

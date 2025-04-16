@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, use } from 'react';
 import { ClassDiagram } from '../models/ClassDiagram';
 import ClassDiagramCanvas from '../components/DiagramComponents/ClassDiagramCanvas';
 import { ReactFlowProvider } from '@xyflow/react';
@@ -9,21 +9,21 @@ interface DiagramViewProps {
 
 const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
     const [diagram, setDiagram] = useState<any>(null);
-    // load the json file from the fileDir
+
     useEffect(() => {
+
         window.myAPI.readFileAsText(fileDir).then((data: string) => {
             const jsonData = JSON.parse(data);
-            console.log("jsonnnnnnnnnnn", jsonData);
             if (jsonData.diagramType === "UML Class Diagram") {
 
                 const classDiagram = ClassDiagram.fromJSON(jsonData);
-                setDiagram(<div className="p-4 w-[1500px] h-[800px]"><ReactFlowProvider><ClassDiagramCanvas diagram={classDiagram} fileDir={fileDir}></ClassDiagramCanvas></ReactFlowProvider></div>);
+                setDiagram(<div className="p-4 w-full h-full"><ReactFlowProvider><ClassDiagramCanvas diagram={classDiagram} fileDir={fileDir}></ClassDiagramCanvas></ReactFlowProvider></div>);
             }
             // handle other diagram types here
         });
     }, [fileDir]);
 
-    return <div className=''>
+    return <div className='w-full h-full'>
         {diagram}
     </div>
 };
