@@ -6,7 +6,7 @@ import fs from 'fs/promises';
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 import {dialog, ipcMain} from 'electron'
-import { Project } from './components/DocumentsHandling/ProjectManagingMenu';
+import { Project } from './models/Project';
 const path = require('path');
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -79,7 +79,7 @@ const createWindow = (): void => {
   ipcMain.handle('view:processedFileFromProject', async (_, project:Project) => {
     try {
       // Read the project directory and return a dict with 3 types of files: markdown, image, json 
-      const projectDir = project.project_dir || `${project.base_dir}/${project.name}_${project.id}`;
+      const projectDir = project.directories.project || `${project.directories.base}/${project.name}_${project.id}`;
       // Change this from processed to output
       const outputDir = path.join(projectDir, 'output');
       console.log('Looking for files in:', outputDir);

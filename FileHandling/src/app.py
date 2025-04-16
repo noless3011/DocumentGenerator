@@ -9,6 +9,8 @@ from agents.DocumentGeneration import GeneralAgent
 from utils.ExcelFileHandler import ExcelFileHandler
 from utils.Project import Project
 from pathlib import Path
+
+
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 app.secret_key = os.urandom(24)  # Secret key for session management
@@ -45,16 +47,14 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 ALLOWED_UPLOAD_EXTENSIONS = {'xlsx', 'xls'}
 
-
+# Config DocumentGenerator API key
+load_dotenv()
+api_key = os.getenv('GOOGLE_API_KEY')
+if not api_key:
+    raise ValueError("GOOGLE_API_KEY not found in environment variables. Please set it in .env file.")
 
 # Create ExcelFileHandler instance
 excel_file_handler = ExcelFileHandler()
-
-# Config DocumentGenerator API key
-load_dotenv()
-api_key = os.getenv('GEMINI_API_KEY')
-if not api_key:
-    raise ValueError("GOOGLE_API_KEY not found in environment variables. Please set it in .env file.")
 
 # Helper function to check allowed file extensions
 def allowed_file(filename):
@@ -154,6 +154,10 @@ def load_project(project_id):
                     current_project.scan_and_update_files()
                     generator.change_project(project)
                     generator.initialize_message()
+                    # output the initial message to a txt file
+                    output_dir = os.path.join(current_project.output_dir, "initial_message.txt")
+                    with open(output_dir, 'w', encoding='utf-8') as f:
+                        f.write(str(generator.init_message.get_conversation()))
                     return jsonify({
                         "status": "success",
                         "project_id": project.id,
