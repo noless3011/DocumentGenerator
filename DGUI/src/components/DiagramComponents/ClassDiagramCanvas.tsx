@@ -120,6 +120,7 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
                     <Button variant="contained" onClick={addClassNode}>
                         Add Class Node
                     </Button>
+                    <br />
                     <Button variant="contained" onClick={handleSave}>
                         Save
                     </Button>

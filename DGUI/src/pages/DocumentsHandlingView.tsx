@@ -32,6 +32,9 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
     const [generating, setGenerating] = useState<boolean>(false);
     const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
     const [selectedFileIndex, setSelectedFileIndex] = useState<number>(-1);
+
+    const [loadingSheets, setLoadingSheets] = useState<boolean>(false);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const workbookRef = useRef<XLSX.WorkBook | null>(null);
 
@@ -134,14 +137,13 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
         setSelectedFileIndex(index);
         const file = projectFiles[index];
         setFileName(file.name);
-
+        setLoadingSheets(true);
         try {
-            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets-for-file`, {
+            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ filePath: file.path }),
                 mode: 'cors',
                 credentials: 'include'
             });
@@ -151,6 +153,8 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
             }
 
             const sheetsResult = await sheetsResponse.json();
+
+            // The API now returns all sheet names in a flat array under "sheets" key
             const sheetOptions: SheetOption[] = sheetsResult.sheets.map((name: string) => ({
                 name,
                 selected: true,
@@ -166,6 +170,8 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
         } catch (error) {
             console.error('Error loading file sheets:', error);
             alert(error instanceof Error ? error.message : 'An error occurred loading the file');
+        } finally {
+            setLoadingSheets(false);
         }
     };
 
@@ -219,8 +225,8 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
 
             const reader = new FileReader();
             reader.onload = (e) => {
-                const binaryString = e.target?.result;
-                const workbook = XLSX.read(binaryString, { type: 'binary' });
+                const data = e.target?.result;
+                const workbook = XLSX.read(data, { type: 'array' });
                 workbookRef.current = workbook;
 
                 const worksheet = workbook.Sheets[sheetName];
@@ -249,7 +255,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
                 console.error('Error reading file for preview:', error);
                 alert('Failed to read file for preview. Check console for details.');
             };
-            reader.readAsBinaryString(fileInput);
+            reader.readAsArrayBuffer(fileInput);
         } catch (error) {
             console.error('Error previewing sheet:', error);
             alert(error instanceof Error ? error.message : 'An error occurred while trying to preview the sheet.');
@@ -369,7 +375,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
     };
 
     return (
-        <div className="flex h-full">
+        <div className="flex h-full overflow-y-scroll">
             {/* Left Panel - Controls */}
             <div className="w-full md:w-1/3 p-4 bg-gray-100 border-r border-gray-200 flex flex-col">
                 <h2 className="panel-title text-xl font-semibold mb-4">Excel File Handler</h2>
@@ -423,6 +429,14 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
                                             onClick={() => handleSelectFile(index)}
                                         >
                                             {file.name}
+                                            {loadingSheets && selectedFileIndex === index && (
+                                                <span className="ml-2 inline-block">
+                                                    <svg className="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                </span>
+                                            )}
                                         </span>
                                     </div>
                                     <span className="text-xs text-gray-500">

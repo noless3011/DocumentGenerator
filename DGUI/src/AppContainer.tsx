@@ -65,6 +65,7 @@ const AppContainer: React.FC = () => {
     // Use provided tabs or fallback to test tabs
     const displayTabs = tabs.length > 0 ? tabs : [];
 
+
     return (
         <div className="flex flex-row h-full flex-grow">
             {/* Vertical Sidebar */}
@@ -87,10 +88,16 @@ const AppContainer: React.FC = () => {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 flex-grow overflow-hidden">
-                <div className='flex flex-col p-6 w-full h-full overflow-hidden'>
+            <div className="flex-1 p-6 flex-grow overflow-x-scroll">
+                <div className='flex flex-col h-full'>
                     <ProjectManagingMenu />
-                    {displayTabs[activeTab].content}
+
+                    {/* Keep all tab contents in DOM, but hide inactive ones */}
+                    {tabs.map((content, index) => (
+                        <div key={index} className={`${activeTab === index ? 'block' : 'hidden'} h-full`}>
+                            {content.content}
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>
