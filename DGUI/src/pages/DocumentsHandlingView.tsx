@@ -70,7 +70,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
             const formData = new FormData();
             formData.append('file', file);
 
-            const uploadResponse = await fetch('http://localhost:5000/upload-excel', {
+            const uploadResponse = await fetch('http://localhost:5000/files/upload-excel', {
                 method: 'POST',
                 body: formData,
                 mode: 'cors',
@@ -84,7 +84,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
 
             const uploadResult = await uploadResponse.json();
 
-            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
+            const sheetsResponse = await fetch(`http://localhost:5000/files/get-sheets`, {
                 method: 'POST',
                 mode: 'cors',
                 credentials: 'include'
@@ -139,7 +139,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
         setFileName(file.name);
         setLoadingSheets(true);
         try {
-            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
+            const sheetsResponse = await fetch(`http://localhost:5000/files/get-sheets`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -185,7 +185,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
         try {
             // If a file is selected from project files
             if (selectedFileIndex >= 0) {
-                const response = await fetch(`http://localhost:5000/preview-sheet`, {
+                const response = await fetch(`http://localhost:5000/files/preview-sheet`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -209,7 +209,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
             }
 
             // Fallback to existing method for newly uploaded file
-            const sheetsResponse = await fetch(`http://localhost:5000/get-sheets`, {
+            const sheetsResponse = await fetch(`http://localhost:5000/files/get-sheets`, {
                 method: 'POST',
                 mode: 'cors'
             });
@@ -304,17 +304,22 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
             return;
         }
 
+        // Create the filesToProcess array with proper sheet format
         const filesToProcess = selectedFiles.map(file => ({
             path: file.path,
             name: file.name,
-            sheets: selectedSheetTypes
+            sheets: Object.fromEntries(
+                sheets
+                    .filter(sheet => sheet.selected)
+                    .map(sheet => [sheet.name, selectedSheetTypes[sheet.name]])
+            )
         }));
 
         try {
             setProcessing(true);
             setProcessingResults(null);
 
-            const response = await fetch('http://localhost:5000/process-multiple-files', {
+            const response = await fetch('http://localhost:5000/files/process-excel', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -348,7 +353,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
 
         try {
             setGenerating(true);
-            const response = await fetch('http://localhost:5000/generate-all-documents', {
+            const response = await fetch('http://localhost:5000/generate/all-documents', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -476,8 +481,8 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
                                                 className="sheet-options-select block appearance-none w-full bg-white border border-gray-300 hover:border-gray-500 px-2 py-1 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm disabled:opacity-50"
                                                 disabled={!sheet.selected}
                                             >
-                                                {sheet.options.map((option) => (
-                                                    <option key={option} value={option}>
+                                                {sheet.options.map((option, index) => (
+                                                    <option key={index} value={option}>
                                                         {option}
                                                     </option>
                                                 ))}
@@ -564,12 +569,12 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
                         <p>Project ID: {processingResults.project_id}</p>
                         <p>Status: {processingResults.status}</p>
                         <ul className="list-disc pl-5">
-                            {Object.entries(processingResults.results).map(([fileName, fileResults]) => (
-                                <li key={fileName} className="mb-2">
+                            {Object.entries(processingResults.results).map(([fileName, fileResults], fileIndex) => (
+                                <li key={fileIndex} className="mb-2">
                                     <strong className="font-medium">{fileName}:</strong>
                                     <ul>
-                                        {Object.entries(fileResults).map(([sheetName, sheetResult]) => (
-                                            <li key={sheetName}>
+                                        {Object.entries(fileResults).map(([sheetName, sheetResult], sheetIndex) => (
+                                            <li key={`${fileIndex}-${sheetIndex}`}>
                                                 <strong className="font-medium ml-4">{sheetName}:</strong> <span className="text-sm">
                                                     {sheetResult.status === 'success'
                                                         ? `Processed as ${sheetResult.type}, output in: ${sheetResult.output_path}`

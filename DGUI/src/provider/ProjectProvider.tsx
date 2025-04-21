@@ -25,7 +25,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     const [currentProject, setCurrentProject] = useState<Project | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const API_BASE_URL = 'http://localhost:5000';
+    const API_BASE_URL = 'http://localhost:5000/projects';
 
     // Initialize by fetching projects on mount
     useEffect(() => {
@@ -41,7 +41,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         setError(null);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/list-projects`, {
+            const response = await fetch(`${API_BASE_URL}/list`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -54,11 +54,12 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             }
 
             const data = await response.json();
-            setProjects(data.projects || []);
+            setProjects(data || []);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to fetch projects');
             console.error('Error fetching projects:', err);
         } finally {
+            console.log(projects)
             setLoading(false);
         }
     };
@@ -68,7 +69,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         setError(null);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/create-project`, {
+            const response = await fetch(`${API_BASE_URL}/create`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -130,7 +131,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         setError(null);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/load-project/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/load/${id}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -167,7 +168,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         setError(null);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/close-project`, {
+            const response = await fetch(`${API_BASE_URL}/close`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -195,7 +196,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         setError(null);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/project-details`, {
+            const response = await fetch(`${API_BASE_URL}/details`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',

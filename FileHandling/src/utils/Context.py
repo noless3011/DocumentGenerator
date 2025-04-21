@@ -1,9 +1,9 @@
 from utils.Project import Project
 
 class Context:
-    def __init__(self, project: Project):
+    def __init__(self):
         self.context = {}
-        self.project = project
+        self.project = None
     def load_project(self, project: Project):
         """Load a project into the context."""
         self.project = project

@@ -49,6 +49,5 @@ Generate a detailed textual description covering:
             model=self.model,
             messages=message.get_conversation()
         )
-        current_app.logger.info(f"Response: {response.choices[0].message.content}")
         return response.choices[0].message.content
         

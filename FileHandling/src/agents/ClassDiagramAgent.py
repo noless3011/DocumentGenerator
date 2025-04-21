@@ -178,12 +178,9 @@ The final deliverable will consist of two distinct parts: the textual "Thought P
             # response_format={"type": "json_object", "response_schema": schema, "enforce_validation": True}
         )
         
-        current_app.logger.info(f"Raw class diagram response received")
-        
         try:
             # Extract JSON from the response
             content = response.choices[0].message.content
-            current_app.logger.info(f"Raw content: {content}")
             # Look for JSON content between ```json and ``` markers
             json_start = content.find("```json")
             if json_start != -1:
@@ -196,18 +193,14 @@ The final deliverable will consist of two distinct parts: the textual "Thought P
                         # Validate the JSON against the schema
                         validate(instance=class_diagram_data, schema=schema)
                         # Log the successful validation
-                        current_app.logger.info("Class diagram JSON validated successfully.")
+                        
                         return class_diagram_data
                     except json.JSONDecodeError as e:
-                        current_app.logger.error(f"Failed to parse extracted JSON: {str(e)}")
                         return {"error": "Invalid JSON in class diagram", "raw_content": json_str}
                     except ValidationError as e:
-                        current_app.logger.error(f"Validation error: {str(e)}")
                         return {"error": "Class diagram JSON does not conform to schema", "raw_content": json_str}
             else:
-                current_app.logger.error("No JSON content found in response")
                 return {"error": "No valid class diagram generated"}
                 
         except json.JSONDecodeError as e:
-            current_app.logger.error(f"Failed to parse JSON: {str(e)}")
             return {"error": "Failed to parse class diagram JSON", "raw_content": content}

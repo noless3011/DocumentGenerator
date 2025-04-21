@@ -4,7 +4,7 @@ import ContextFileList from "../components/ChatSideBar/ContextFileList";
 import { Message } from "../models/Message";
 import MessageComponent from "../components/ChatSideBar/Messages";
 
- 
+
 
 
 const ChatView = () => {
@@ -93,8 +93,8 @@ const ChatView = () => {
             <div
                 className="flex flex-col bg-black/5 w-full overflow-y-auto overflow-x-hidden h-[85%]"
             >
-                {messages.map((message) => (
-                    <MessageComponent key={message.id + message.timestamp.getTime()} message={message} />
+                {messages.map((message, index) => (
+                    <MessageComponent key={index} message={message} />
                 ))}
             </div>
 

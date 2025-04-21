@@ -13,8 +13,8 @@ from agents.IAgent import IAgent
 from agents.TextDocumentAgent import TextDocumentAgent
 from agents.ClassDiagramAgent import ClassDiagramAgent
 from agents.PrototypeAgent import PrototypeAgent
-from flask import current_app
 from enum import Enum
+
 
 class DocumentType(Enum):
     """Enum for selecting document type."""
@@ -51,6 +51,8 @@ class GeneralAgent:
     def change_project(self, project: Project):
         """Change the current project."""
         self.project = project
+        if self.project is None:
+            return
         self.initialize_message()
 
 
@@ -85,8 +87,7 @@ class GeneralAgent:
         # Add the CSV files from the project
         csv_files = self.project.get_csv_dirs()
         for csv_file in csv_files:
-            csv_path = self.project.get_csv_path(csv_file)
-            csv_data = pd.read_csv(csv_path)
+            csv_data = pd.read_csv(csv_file)
             csv_data_str = csv_data.to_string()
             self.init_message.add_user_text(f"Here is the content of the CSV file {csv_file}:")
             self.init_message.add_user_text(csv_data_str)
@@ -104,8 +105,7 @@ class GeneralAgent:
             try:
                 f.write(content)
             except Exception as e:
-                #print err with traceback
-                current_app.logger.error(f"Error writing to file: {e}")
+                print(f"Error writing to file: {e}")
                 
         print(f"Document saved to {output_path}")
     
@@ -129,13 +129,14 @@ class GeneralAgent:
                 f.write(content)
             except Exception as e:
                 #print err with traceback
-                current_app.logger.error(f"Error writing to file: {e}")
+                print(f"Error writing to file: {e}")
                 
         print(f"HTML saved to {output_path}")
     
     
     def generate_document(self, document_type: DocumentType) -> None:
-        self.agents[document_type].generate()
+        return self.agents[document_type]["agent"].generate(self.init_message)
+
     
         
         

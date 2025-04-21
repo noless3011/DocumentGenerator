@@ -214,9 +214,9 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
                         </Typography>
                     ) : (
                         <List>
-                            {projects.map((project) => (
+                            {projects.map((project, index) => (
                                 <ListItem
-                                    key={project.id}
+                                    key={index}
                                     divider
                                     secondaryAction={
                                         <Button
