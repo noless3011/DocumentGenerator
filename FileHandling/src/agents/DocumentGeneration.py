@@ -6,12 +6,21 @@ import pandas as pd
 import json
 from typing import List, Dict, Any
 from utils.Message import Message
+from utils.Context import Context
 from utils.Project import Project
+
 from agents.IAgent import IAgent
 from agents.TextDocumentAgent import TextDocumentAgent
 from agents.ClassDiagramAgent import ClassDiagramAgent
 from agents.PrototypeAgent import PrototypeAgent
 from flask import current_app
+from enum import Enum
+
+class DocumentType(Enum):
+    """Enum for selecting document type."""
+    TEXT_DOCUMENT = "text_document"
+    PROTOTYPE = "prototype"
+    CLASS_DIAGRAM = "class_diagram"
 
 class GeneralAgent:
     def __init__(self, model="gemini/gemini-2.0-flash", project: Project=None, api_key=None):
@@ -22,10 +31,21 @@ class GeneralAgent:
             raise ValueError("Gemini API key must be provided or set as an environment variable")
         self.project = project
         self.model = model
-        self.agents = [IAgent] # type: List[IAgent]
-        self.agents.append(TextDocumentAgent(model))
-        self.agents.append(PrototypeAgent(model))
-        self.agents.append(ClassDiagramAgent(model))
+        self.general_context = Context()
+        self.agents: Dict[DocumentType, Dict[str, IAgent | Context]] = {
+            DocumentType.TEXT_DOCUMENT: {
+                "agent": TextDocumentAgent(model),
+                "context": Context()
+            },
+            DocumentType.PROTOTYPE: {
+                "agent": PrototypeAgent(model),
+                "context": Context()
+            },
+            DocumentType.CLASS_DIAGRAM: {
+                "agent": ClassDiagramAgent(model),
+                "context": Context()
+            }
+        }
         self.init_message = Message()
 
     def change_project(self, project: Project):
@@ -113,22 +133,9 @@ class GeneralAgent:
                 
         print(f"HTML saved to {output_path}")
     
-    def generate_text_document(self):
-        """Generate a text document."""
-        for agent in self.agents:
-            if isinstance(agent, TextDocumentAgent):
-                return agent.generate(self.init_message)
-    def generate_prototype(self):
-        """Generate a prototype."""
-        for agent in self.agents:
-            if isinstance(agent, PrototypeAgent):
-                return agent.generate(self.init_message)
     
-    def generate_class_diagram(self):
-        """Generate a class diagram."""
-        for agent in self.agents:
-            if isinstance(agent, ClassDiagramAgent):
-                return agent.generate(self.init_message)
+    def generate_document(self, document_type: DocumentType) -> None:
+        self.agents[document_type].generate()
     
         
         

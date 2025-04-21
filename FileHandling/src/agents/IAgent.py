@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
-
+from utils.Message import Message   
 class IAgent(ABC):
     """Interface for agents that can process tasks."""
 
     @abstractmethod
-    def generate(self, prompt: str, context: Dict[str, Any] = None) -> str:
+    def generate(self, message: Message) -> str:
         """
         Process a prompt with optional context and return a result.
 

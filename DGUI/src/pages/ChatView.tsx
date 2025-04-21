@@ -1,35 +1,118 @@
+import { useState, useEffect, useRef } from "react";
+import ChatWindow from "../components/ChatSideBar/ChatWindow";
+import ContextFileList from "../components/ChatSideBar/ContextFileList";
+import { Message } from "../models/Message";
+import MessageComponent from "../components/ChatSideBar/Messages";
+
+ 
+
+
 const ChatView = () => {
+    const [messages, setMessages] = useState<Message[]>([
+        {
+            id: "1",
+            content: "Hello! How can I assist you today?",
+            sender: "ai",
+            timestamp: new Date(),
+        },
+        {
+            id: "2",
+            content: "I need help with my project.",
+            sender: "user",
+            timestamp: new Date(),
+        },
+        {
+            id: "3",
+            content: "Sure! What specifically do you need help with?",
+            sender: "ai",
+            timestamp: new Date(),
+        },
+        {
+            id: "4",
+            content: "I have a question about the API.",
+            sender: "user",
+            timestamp: new Date(),
+        },
+        {
+            id: "1",
+            content: "Hello! How can I assist you today?",
+            sender: "ai",
+            timestamp: new Date(),
+        },
+        {
+            id: "2",
+            content: "I need help with my project.",
+            sender: "user",
+            timestamp: new Date(),
+        },
+        {
+            id: "3",
+            content: "Sure! What specifically do you need help with?",
+            sender: "ai",
+            timestamp: new Date(),
+        },
+        {
+            id: "4",
+            content: "I have a question about the API.",
+            sender: "user",
+            timestamp: new Date(),
+        },
+        {
+            id: "1",
+            content: "Hello! How can I assist you today?",
+            sender: "ai",
+            timestamp: new Date(),
+        },
+        {
+            id: "2",
+            content: "I need help with my project.",
+            sender: "user",
+            timestamp: new Date(),
+        },
+        {
+            id: "3",
+            content: "Sure! What specifically do you need help with?",
+            sender: "ai",
+            timestamp: new Date(),
+        },
+        {
+            id: "4",
+            content: "I have a question about the API.",
+            sender: "user",
+            timestamp: new Date(),
+        },
+    ]);
+
+    const [isDragging, setIsDragging] = useState<boolean>(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+
     return (
-        <div className="w-1/3 bg-white shadow-sm rounded-lg m-3 ml-0 flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-800">Chat Assistant</h3>
-                <p className="text-sm text-gray-500">Ask questions about your project</p>
+        <div ref={containerRef} className="w-full h-full shadow-sm rounded-lg pb-5 m-3 ml-0 flex flex-col relative">
+            {/* Chat history with dynamic height */}
+            <div
+                className="flex flex-col bg-black/5 w-full overflow-y-auto overflow-x-hidden h-[85%]"
+            >
+                {messages.map((message) => (
+                    <MessageComponent key={message.id + message.timestamp.getTime()} message={message} />
+                ))}
             </div>
-            <div className="flex-1 p-4 overflow-auto">
-                <div className="h-full flex items-center justify-center text-gray-500">
-                    <div className="text-center">
-                        <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                        </svg>
-                        <p>Ask a question about your document</p>
-                    </div>
-                </div>
-            </div>
-            <div className="p-4 border-t border-gray-200">
-                <div className="flex">
-                    <input
-                        type="text"
-                        className="flex-1 py-2 px-4 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Type your question here..."
-                    />
-                    <button title="Send" className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                    </button>
-                </div>
+
+            <ContextFileList />
+            <ChatWindow />
+            <div className="h-10 flex flex-row w-full">
+                <button
+                    className="px-4 py-2 rounded-md hover:bg-black/25 ml-auto mr-2 my-1 flex items-center"
+                    title="Send message"
+                >
+                    <span className="mr-1">Send</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                        <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
+                    </svg>
+                </button>
             </div>
         </div>
     );
-}
+};
+
 export default ChatView;

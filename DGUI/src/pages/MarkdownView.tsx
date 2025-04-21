@@ -24,7 +24,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({ fileDir, className }) => {
     }, [fileDir]);
 
     return (
-        <div className={`h-full markdown-view bg-white rounded-lg shadow p-6 ${className}`}>
+        <div className={`h-full markdown-view bg-transparent p-6 ${className}`}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
