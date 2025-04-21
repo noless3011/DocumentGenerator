@@ -9,6 +9,7 @@ from agents.IAgent import IAgent
 class ClassDiagramAgent(IAgent):
     def __init__(self, model):
         self.model = model
+        
 
     def generate(self, message: Message) -> Dict[str, Any]:
         """Generate a class diagram in JSON format using LLM with code/data files."""

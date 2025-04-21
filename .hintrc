@@ -8,5 +8,11 @@
     "typescript-config/strict": "off",
     "typescript-config/consistent-casing": "off",
     "axe/forms": "off"
-  }
+  },
+  "browserslist": [
+    "defaults",
+    "not ie 11",
+    "not ios_saf <= 18.3",
+    "not safari <= 18.3"
+  ]
 }

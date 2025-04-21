@@ -88,7 +88,7 @@ const AppContainer: React.FC = () => {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 p-6 flex-grow overflow-x-scroll">
+            <div className="flex-1 p-6 pb-10 flex-grow overflow-hidden">
                 <div className='flex flex-col h-full'>
                     <ProjectManagingMenu />
 

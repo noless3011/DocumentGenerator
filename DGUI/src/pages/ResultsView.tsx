@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import DiagramView from './DiagramView';
 import MarkdownView from './MarkdownView';
 import ImageView from './ImageView';
 import PreviewAppView from '../components/PreviewApp/PreviewAppView';
 import ChatView from './ChatView';
 import { useProjects } from '../provider/ProjectProvider';
+import { ChatProvider } from '../provider/ChatProvider';
 
 interface TabProps {
     title: string;
@@ -19,6 +20,9 @@ const ResultsView: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [chatPanelVisible, setChatPanelVisible] = useState<boolean>(true);
+    const [resultsWidth, setResultsWidth] = useState<number>(67); // 67% (2/3) initially
+    const [isDragging, setIsDragging] = useState<boolean>(false);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!project) {
@@ -85,6 +89,43 @@ const ResultsView: React.FC = () => {
         setChatPanelVisible(!chatPanelVisible);
     };
 
+    // Mouse event handlers for resizing
+    const handleMouseDown = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isDragging || !containerRef.current) return;
+
+            const containerRect = containerRef.current.getBoundingClientRect();
+            const containerWidth = containerRect.width;
+            const newWidth = ((e.clientX - 30 - containerRect.left) / containerWidth) * 100; // 30 is the padding, if dont minus 30, the handle will be snappy
+
+            // Limit resize between 20% and 80%
+            const boundedWidth = Math.min(Math.max(newWidth, 20), 80);
+            setResultsWidth(boundedWidth);
+        };
+
+        const handleMouseUp = () => {
+            setIsDragging(false);
+        };
+
+        if (isDragging) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            // Add a class to the body to prevent text selection during drag
+            document.body.classList.add('resize-cursor');
+        }
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.classList.remove('resize-cursor');
+        };
+    }, [isDragging]);
+
     if (!project) {
         return (
             <div className="flex items-center justify-center h-full w-full bg-gray-50">
@@ -102,8 +143,12 @@ const ResultsView: React.FC = () => {
     return (
         <div className="flex flex-col h-full w-full max-w-full bg-gray-50">
             <div className="flex flex-col h-full overflow-hidden">
-                <div className='flex flex-row h-full overflow-hidden'>
-                    <div className={`transition-all duration-300 ease-in-out ${chatPanelVisible ? 'w-2/3' : 'w-full'} bg-white shadow-sm rounded-lg m-3 overflow-hidden flex flex-col`}>
+                <div ref={containerRef} className="flex flex-row h-full overflow-hidden relative">
+                    {/* Results panel with dynamic width */}
+                    <div
+                        className="bg-white shadow-sm rounded-lg m-3 overflow-hidden flex flex-col"
+                        style={{ width: chatPanelVisible ? `${resultsWidth}%` : '100%' }}
+                    >
                         {/* Project title bar */}
                         <div className="bg-white px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                             <div className="flex items-center">
@@ -209,8 +254,21 @@ const ResultsView: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Chat Panel */}
-                    {chatPanelVisible && (<ChatView />)}
+                    {/* Resizer handle */}
+                    {chatPanelVisible && (
+                        <div
+                            className={`w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 z-10 my-3 ${isDragging ? 'bg-blue-500' : 'bg-gray-300'
+                                }`}
+                            onMouseDown={handleMouseDown}
+                        />
+                    )}
+
+                    {/* Chat Panel with dynamic width */}
+                    {chatPanelVisible && (
+                        <div className="bg-white shadow-sm rounded-lg overflow-hidden flex-1">
+                            <ChatProvider><ChatView /></ChatProvider>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
