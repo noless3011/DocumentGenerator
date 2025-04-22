@@ -107,4 +107,4 @@ if __name__ == "__main__":
     print(f"Starting Uvicorn server on http://0.0.0.0:5000")
     # Use reload=True for development, disable in production
     # turn on debug=True for more verbose output
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True, debug=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)

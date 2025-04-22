@@ -6,7 +6,6 @@ interface DiagramViewProps {
     fileDir: string;
 }
 
-
 const DiagramView: React.FC<DiagramViewProps> = ({ fileDir }) => {
     const [diagram, setDiagram] = useState<any>(null);
 
