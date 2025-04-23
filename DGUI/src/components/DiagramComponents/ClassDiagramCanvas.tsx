@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import '@xyflow/react/dist/base.css';
 import {
     ReactFlow,
@@ -12,11 +12,11 @@ import {
 } from '@xyflow/react';
 import ClassNode from './ClassDiagram/ClassNode';
 import ClassEdge from './ClassDiagram/ClassEdge';
-import { Button } from '@mui/material';
+import { Button, Menu, MenuItem } from '@mui/material';
 import EdgeTypeMenu from './ClassDiagram/EdgeTypeMenu';
 import { ClassDiagram, RelationshipType } from '../../models/ClassDiagram';
 import { useDiagramContext, ClassDiagramProvider } from '../../provider/diagram_providers/ClassDiagramProvider';
-import { useState } from 'react';
+import { autoArrange, gridLayout, circleLayout, LayoutOptions } from '../../utils/Arrange';
 
 const nodeTypes = {
     class: ClassNode,
@@ -45,6 +45,7 @@ interface ClassDiagramCanvasProps {
 const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
     const canvas = useRef<HTMLDivElement>(null);
     const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
+    const [arrangeMenu, setArrangeMenu] = useState<{ top: number; left: number } | null>(null);
 
     const {
         nodes,
@@ -56,7 +57,8 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
         flipEdgeDirection,
         deleteEdge,
         addClassNode,
-        saveDiagram
+        saveDiagram,
+        setNodes
     } = useDiagramContext();
 
     const onEdgeContextMenu: EdgeMouseHandler = useCallback((event, edge) => {
@@ -73,7 +75,10 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
         });
     }, []);
 
-    const onPaneClick = useCallback(() => setMenu(null), []);
+    const onPaneClick = useCallback(() => {
+        setMenu(null);
+        setArrangeMenu(null);
+    }, []);
 
     const handleSelectEdgeType = useCallback((edgeId: string, type: RelationshipType) => {
         updateRelationship(edgeId, { type });
@@ -83,7 +88,7 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
     const handleFlipDirection = useCallback((edgeId: string) => {
         flipEdgeDirection(edgeId);
         setMenu(null);
-    }, [edges, updateRelationship]);
+    }, [flipEdgeDirection]);
 
     const handleDeleteEdge = useCallback((edgeId: string) => {
         deleteEdge(edgeId);
@@ -95,6 +100,35 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
             saveDiagram(fileDir);
         }
     }, [fileDir, saveDiagram]);
+
+    const handleArrangeClick = useCallback((event: React.MouseEvent) => {
+        event.stopPropagation();
+        const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        setArrangeMenu({
+            top: buttonRect.bottom,
+            left: buttonRect.left,
+        });
+    }, []);
+
+    const handleArrange = useCallback((layoutType: string, options: LayoutOptions = {}) => {
+        let arrangedNodes;
+        switch (layoutType) {
+            case 'auto':
+                arrangedNodes = autoArrange(nodes, edges, options);
+                break;
+            case 'grid':
+                arrangedNodes = gridLayout(nodes, options);
+                break;
+            case 'circle':
+                arrangedNodes = circleLayout(nodes, options);
+                break;
+            default:
+                arrangedNodes = autoArrange(nodes, edges, options);
+        }
+
+        setNodes(arrangedNodes);
+        setArrangeMenu(null);
+    }, [nodes, edges, setNodes]);
 
     return (
         <>
@@ -121,6 +155,10 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
                         Add Class Node
                     </Button>
                     <br />
+                    <Button variant="contained" onClick={handleArrangeClick}>
+                        Arrange
+                    </Button>
+                    <br />
                     <Button variant="contained" onClick={handleSave}>
                         Save
                     </Button>
@@ -135,6 +173,33 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
                         onFlipDirection={handleFlipDirection}
                         onClick={(e) => e.stopPropagation()}
                     />
+                )}
+                {arrangeMenu && (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            zIndex: 1000,
+                            backgroundColor: 'white',
+                            boxShadow: '0 0 10px rgba(0,0,0,0.2)',
+                            borderRadius: '4px',
+                            top: arrangeMenu.top,
+                            left: arrangeMenu.left
+                        }}
+                    >
+                        <Menu
+                            open={Boolean(arrangeMenu)}
+                            anchorReference="anchorPosition"
+                            anchorPosition={arrangeMenu && {
+                                top: arrangeMenu.top,
+                                left: arrangeMenu.left
+                            }}
+                            onClose={() => setArrangeMenu(null)}
+                        >
+                            <MenuItem onClick={() => handleArrange('auto')}>Auto Arrange</MenuItem>
+                            <MenuItem onClick={() => handleArrange('grid')}>Grid Layout</MenuItem>
+                            <MenuItem onClick={() => handleArrange('circle', { centerX: 500, centerY: 300 })}>Circle Layout</MenuItem>
+                        </Menu>
+                    </div>
                 )}
             </ReactFlow>
         </>

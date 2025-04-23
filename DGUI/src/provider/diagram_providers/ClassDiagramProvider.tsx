@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo } from 'react';
 import {
     Node, Edge, OnNodesChange, OnEdgesChange, OnConnect,
     applyNodeChanges, applyEdgeChanges, addEdge
@@ -19,9 +19,16 @@ interface DiagramContextType {
     deleteClassNode: (nodeId: string) => void;
     saveDiagram: (fileDir: string) => Promise<void>;
     getDiagramData: () => ClassDiagram;
+    setNodes: (nodes: Node<{ class: Class, id: string }>[]) => void;
 }
 
 const DiagramContext = createContext<DiagramContextType | undefined>(undefined);
+
+// Keep a cache of diagram states to prevent reloading when switching tabs
+const diagramStateCache = new Map<string, {
+    nodes: Node<{ class: Class, id: string }>[],
+    edges: Edge<{ relationship: Relationship }>[]
+}>();
 
 export function useDiagramContext() {
     const context = useContext(DiagramContext);
@@ -37,11 +44,35 @@ interface ClassDiagramProviderProps {
 }
 
 export function ClassDiagramProvider({ children, initialDiagram }: ClassDiagramProviderProps) {
-    // Convert initial diagram to nodes and edges
-    const { nodes: initialNodes, edges: initialEdges } = convertDiagramToNodesAndEdges(initialDiagram);
+    // Generate a cache key from the diagram name
+    const cacheKey = `diagram-${initialDiagram.diagramName}`;
+
+    // Convert initial diagram to nodes and edges only if not in cache
+    const { initialNodes, initialEdges } = useMemo(() => {
+        // Check if we have this diagram cached
+        if (diagramStateCache.has(cacheKey)) {
+            const cached = diagramStateCache.get(cacheKey)!;
+            return {
+                initialNodes: cached.nodes,
+                initialEdges: cached.edges
+            };
+        }
+
+        // Otherwise convert from the initial diagram
+        const { nodes, edges } = convertDiagramToNodesAndEdges(initialDiagram);
+        return {
+            initialNodes: nodes,
+            initialEdges: edges
+        };
+    }, [initialDiagram, cacheKey]);
 
     const [nodes, setNodes] = useState<Node<{ class: Class, id: string }>[]>(initialNodes);
     const [edges, setEdges] = useState<Edge<{ relationship: Relationship }>[]>(initialEdges);
+
+    // Update cache when nodes or edges change
+    useMemo(() => {
+        diagramStateCache.set(cacheKey, { nodes, edges });
+    }, [nodes, edges, cacheKey]);
 
     const onNodesChange: OnNodesChange = useCallback(
         (changes) => setNodes((nds) => applyNodeChanges(changes, nds) as Node<{ class: Class, id: string }>[]),
@@ -199,7 +230,8 @@ export function ClassDiagramProvider({ children, initialDiagram }: ClassDiagramP
             addClassNode,
             deleteClassNode,
             saveDiagram,
-            getDiagramData
+            getDiagramData,
+            setNodes
         }}>
             {children}
         </DiagramContext.Provider>
