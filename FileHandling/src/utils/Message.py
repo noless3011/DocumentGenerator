@@ -7,7 +7,12 @@ class Message:
     def __init__(self):
         # Maintain a list of messages (each message is a dict with "role" and "content")
         self.messages = []
-
+    def replace_init_message(self, new_init_message):
+        """Replace the initial message in the conversation."""
+        if self.messages:
+            self.messages[0] = {"role": "user", "content": [{"type": "text", "text": new_init_message}]}
+        else:
+            raise IndexError("No messages available to replace.")
     def add_user_text(self, text, cache_control=None):
         """Add a user text message to the conversation."""
         entry = {"type": "text", "text": text}
@@ -15,7 +20,7 @@ class Message:
             entry["cache_control"] = cache_control
         self.messages.append({"role": "user", "content": [entry]})
 
-    def add_user_image_from_file(self, image_path, mime_type="image/jpeg"):
+    def add_user_image_from_file(self, image_path, mime_type="image/png"):
         """Read an image file, encode it in base64, and add it as a user image message."""
         image_bytes = Path(image_path).read_bytes()
         encoded_data = base64.b64encode(image_bytes).decode("utf-8")

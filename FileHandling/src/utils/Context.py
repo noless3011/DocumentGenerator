@@ -1,17 +1,26 @@
 from utils.Project import Project
+from typing import Dict, List
+
+class Requirements:
+    input_description: str = ""
+    output_description: str = ""
+    # Features can be edited (dictionary)
+    features: Dict[str, str]
+    further_requirements: str = ""
 
 class Context:
     def __init__(self):
-        self.context = {}
-        self.project = None
-    def load_project(self, project: Project):
-        """Load a project into the context."""
-        self.project = project
-        self.context = {
-            "project": project,
-            "files": project.files,
-            "base_dir": project.base_dir,
-            "input_dir": project.input_dir,
-            "processed_dir": project.processed_dir,
-            "output_dir": project.output_dir
-        }
+        # raw data from the excel file
+        self.csv_description = str
+        self.ui_image = List[str]
+        self.diagram_image = List[str]
+
+        # initial context from the excel file and user prompt
+        self.project_name = str
+        self.requirements = Requirements()
+        self.tech_stack = str
+
+        # generated files
+        self.generated_text_doc = Dict[str, str] # name and the text of the doc
+        self.generated_diagram = Dict[any]
+        self.prototype_code = str
