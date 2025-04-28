@@ -1,4 +1,5 @@
 # main.py
+from FileHandling.src.routers import agent
 import uvicorn
 from fastapi import FastAPI, Request, Response, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from config import settings # Import shared settings
 from dependencies import app_state # Import shared state
-from routers import projects, files, generation # Import routers
+from routers import projects, files # Import routers
 # --- Lifespan Management (Optional but good practice) ---
 # Use lifespan events for setup/teardown if needed (e.g., database connections)
 # @asynccontextmanager
@@ -86,7 +87,7 @@ async def debug_exception_handler(request: Request, exc: Exception):
 # --- Include Routers ---
 app.include_router(projects.router)
 app.include_router(files.router)
-app.include_router(generation.router)
+app.include_router(agent.router)
 
 
 # --- Basic Root and Health Check ---

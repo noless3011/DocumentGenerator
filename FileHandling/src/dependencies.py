@@ -1,9 +1,9 @@
 # dependencies.py
-from typing import Optional, Annotated
+from typing import Dict, Optional, Annotated
 from fastapi import Depends, HTTPException, status
 
 from config import settings
-from agents.DocumentGeneration import GeneralAgent
+from agents.IAgent import IAgent
 from utils.Project import Project
 from utils.ExcelFileHandler import ExcelFileHandler
 
@@ -23,30 +23,36 @@ def get_excel_handler() -> ExcelFileHandler:
     # Could add configuration here if needed
     return ExcelFileHandler()
 
-# Store the generator instance globally within this module
-# It needs to be updated when the project changes
-_generator_instance: Optional[GeneralAgent] = None
+# Store the agent instance globally within this module, the user can add multiple instances of the same agent type but with different names
+_agent_instances: Dict[str, IAgent] = {}
 
-def get_generator_instance(state: Annotated[dict, Depends(get_app_state)]) -> GeneralAgent:
-    """
-    Provides the GeneralAgent instance, initializing or updating it
-    based on the current project in the app state.
-    """
-    global _generator_instance
-    current_project: Optional[Project] = state.get("current_project")
+def add_agent_instance(agent_name: str, agent: IAgent) -> None:
+    """Adds a agent instance to the global dictionary."""
+    _agent_instances[agent_name] = agent
 
-    if _generator_instance is None:
-        print("Initializing GeneralAgent...")
-        _generator_instance = GeneralAgent(api_key=settings.GOOGLE_API_KEY, project=current_project)
-        if current_project:
-             _generator_instance.initialize_message() # Initialize only if project exists
-    elif _generator_instance.project != current_project:
-         print(f"Changing project for GeneralAgent to: {current_project.name if current_project else 'None'}")
-         _generator_instance.change_project(current_project)
-         if current_project:
-             _generator_instance.initialize_message() # Re-initialize message for new project
+def get_agent_instance(agent_name: str) -> IAgent:
+    """Retrieves a agent instance from the global dictionary."""
+    if agent_name not in _agent_instances:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"agent '{agent_name}' not found."
+        )
+    return _agent_instances[agent_name]
 
-    return _generator_instance
+def remove_agent_instance(agent_name: str) -> None:
+    """Removes a agent instance from the global dictionary."""
+    if agent_name in _agent_instances:
+        del _agent_instances[agent_name]
+
+def get_agent_with_type(agent_type: type) -> Dict[IAgent]:
+    """Retrieves all agent instances of a specific type from the global dictionary."""
+    return {name: agent for name, agent in _agent_instances.items() if isinstance(agent, agent_type)}  
+
+def clear_agent_instances() -> None:
+    """Clears all agent instances from the global dictionary."""
+    _agent_instances.clear()
+
+
 
 def get_current_project(state: Annotated[dict, Depends(get_app_state)]) -> Project:
     """
