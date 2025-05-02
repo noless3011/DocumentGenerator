@@ -39,14 +39,32 @@ def get_agent_instance(agent_name: str) -> IAgent:
         )
     return _agent_instances[agent_name]
 
-def remove_agent_instance(agent_name: str) -> None:
-    """Removes a agent instance from the global dictionary."""
-    if agent_name in _agent_instances:
+def remove_agent_instance(agent_name: str = None) -> None:
+    """
+    Removes a agent instance from the global dictionary.
+    If agent_name is None, removes all agent instances.
+    """
+    if agent_name is None:
+        _agent_instances.clear()
+    elif agent_name in _agent_instances:
         del _agent_instances[agent_name]
 
-def get_agent_with_type(agent_type: type) -> Dict[IAgent]:
-    """Retrieves all agent instances of a specific type from the global dictionary."""
-    return {name: agent for name, agent in _agent_instances.items() if isinstance(agent, agent_type)}  
+def get_agent_with_type(agent_type: str) -> Dict[str, IAgent]:
+    """
+    Retrieves all agent instances of a specific type from the global dictionary.
+    
+    Args:
+        agent_type (str): The type name of the agent to retrieve (e.g., "TextDocumentAgent")
+        
+    Returns:
+        Dict[str, IAgent]: Dictionary of agents matching the specified type
+    """
+    result = {}
+    for name, agent in _agent_instances.items():
+        # Check agent class name against the requested type
+        if agent.__class__.__name__ == agent_type:
+            result[name] = agent
+    return result
 
 def clear_agent_instances() -> None:
     """Clears all agent instances from the global dictionary."""

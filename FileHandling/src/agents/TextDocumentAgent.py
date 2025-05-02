@@ -5,10 +5,17 @@ from typing import List, Dict, Any
 from utils.Message import Message
 from utils.Context import Context
 from agents.IAgent import IAgent
+from utils.Project import Project
+
 class TextDocumentAgent(IAgent):
-    def __init__(self, model:str):
+    def __init__(self, name: str, model: str, project: Project = None):
+        self.name = name
         self.model = model
         self.message = Message()
+        
+        # Initialize with project context if provided
+        if project:
+            self.update_context(project.context)
 
     def _extract_markdown_content(self, response_content: str) -> tuple[str | None, str | None]:
         # Use regex to find the markdown block, ignoring case and allowing for whitespace

@@ -10,8 +10,7 @@ from datetime import datetime
 from utils.Project import Project
 from utils import RegistryHandler # Import the module
 from models import ProjectCreateRequest, ProjectInfo, ProjectListItem, SimpleStatusResponse, ErrorResponse
-from dependencies import get_app_state, get_generator_instance, get_optional_current_project
-from agents.DocumentGeneration import GeneralAgent # Needed for typing
+from dependencies import get_app_state, get_agent_instance, get_optional_current_project
 
 router = APIRouter(
     prefix="/projects",
@@ -31,8 +30,7 @@ async def list_projects():
 @router.post("/create", response_model=ProjectInfo, status_code=status.HTTP_201_CREATED, summary="Create a new project")
 async def create_project(
     request_data: ProjectCreateRequest,
-    app_state: Annotated[Dict, Depends(get_app_state)],
-    generator: Annotated[GeneralAgent, Depends(get_generator_instance)] # Trigger generator update
+    app_state: Annotated[Dict, Depends(get_app_state)]
 ):
     """
     Creates a new project folder structure and metadata file,
@@ -49,9 +47,6 @@ async def create_project(
     elif not base_dir.is_dir():
          raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Base directory path exists but is not a directory: {base_dir}")
 
-    # Close existing project if any
-    if app_state.get("current_project"):
-        await close_project_internal(app_state, generator) # Use internal helper
 
     project = Project(name=project_name, base_dir=str(base_dir)) # Project expects str
     project.create_directory_structure()
@@ -61,11 +56,6 @@ async def create_project(
     app_state["current_project"] = project
     print(f"Project '{project.name}' ({project.id}) created and set as current.")
 
-    # Re-trigger generator update to ensure it picks up the new project
-    # (get_generator_instance dependency already handles this on next call,
-    # but explicit call after setting state ensures init_message runs)
-    generator.change_project(project)
-    generator.initialize_message()
 
     # Update projects registry
     projects = RegistryHandler.load_projects_registry()
@@ -92,8 +82,7 @@ async def create_project(
 @router.post("/load/{project_id}", response_model=ProjectInfo, summary="Load an existing project")
 async def load_project(
     project_id: str,
-    app_state: Annotated[Dict, Depends(get_app_state)],
-    generator: Annotated[GeneralAgent, Depends(get_generator_instance)] # Trigger generator update
+    app_state: Annotated[Dict, Depends(get_app_state)]
 ):
     """Loads project metadata and sets it as the current project."""
     projects = RegistryHandler.load_projects_registry()
@@ -104,7 +93,7 @@ async def load_project(
 
     # Close existing project if any
     if app_state.get("current_project") and app_state["current_project"].id != project_id:
-         await close_project_internal(app_state, generator) # Use internal helper
+         await close_project_internal(app_state) # Use internal helper
 
     base_dir = Path(project_info["base_dir"])
     project_dir_suffix = f"_{project_id}"
@@ -133,21 +122,6 @@ async def load_project(
     app_state["current_project"] = loaded_project
     print(f"Project '{loaded_project.name}' ({loaded_project.id}) loaded and set as current.")
 
-    # Update generator and initialize message
-    generator.change_project(loaded_project)
-    generator.initialize_message()
-
-    # Optionally save the initial message (as in original code)
-    try:
-        initial_message_path = Path(loaded_project.output_dir) / "initial_message.txt"
-        initial_message_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(initial_message_path, 'w', encoding='utf-8') as f:
-            f.write(str(generator.init_message.get_conversation()))
-        print(f"Saved initial message to {initial_message_path}")
-    except Exception as e:
-        print(f"Warning: Could not save initial message: {e}")
-
-
     return ProjectInfo(
         id=loaded_project.id,
         name=loaded_project.name,
@@ -161,11 +135,10 @@ async def load_project(
 
 @router.post("/close", response_model=SimpleStatusResponse, summary="Close the current project")
 async def close_project(
-    app_state: Annotated[Dict, Depends(get_app_state)],
-    generator: Annotated[GeneralAgent, Depends(get_generator_instance)] # Ensure generator knows project is closed
+    app_state: Annotated[Dict, Depends(get_app_state)]
 ):
     """Saves metadata, updates registry, and clears the current project state."""
-    await close_project_internal(app_state, generator)
+    await close_project_internal(app_state)
     return SimpleStatusResponse(status="success", message="Project closed successfully")
 
 
@@ -193,8 +166,8 @@ async def get_project_details(
 
 
 # --- Internal Helper Functions ---
-
-async def close_project_internal(app_state: dict, generator: GeneralAgent):
+# TODO: remove the GeneralAgent parameter because it has been deleted
+async def close_project_internal(app_state: dict):
     """Internal logic to close the project, reusable by other endpoints."""
     project_to_close: Optional[Project] = app_state.get("current_project")
 
@@ -217,5 +190,4 @@ async def close_project_internal(app_state: dict, generator: GeneralAgent):
 
     # Clear the current project state and update generator
     app_state["current_project"] = None
-    generator.change_project(None)
     print("Project closed and state cleared.")

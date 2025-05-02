@@ -12,7 +12,6 @@ from models import (
     SimpleStatusResponse
 )
 from dependencies import get_current_project, get_agent_with_type
-from models.agent_models import ListAgentsWithType
 from dependencies import add_agent_instance, get_agent_instance, remove_agent_instance
 from fastapi import Body
 
@@ -81,8 +80,79 @@ def clear_all_agents() -> SimpleStatusResponse:
     """
     remove_agent_instance()
     return SimpleStatusResponse(status="success", message="All agents cleared successfully.")
-@router.post("/generate-text-document/{agent_name}")
+
+@router.post("/generate/{agent_name}")
 def generate_text_document(
     agent_name: str,
+    project: Project = Depends(get_current_project)
+) -> TextGenerationResponse:
+    """
+    Generate a text document using the specified agent.
+    """
+    agent = get_agent_instance(agent_name)
     
-)
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent '{agent_name}' not found."
+        )
+    
+    if not isinstance(agent, TextDocumentAgent):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Agent '{agent_name}' is not a TextDocumentAgent."
+        )
+    
+    # Generate the document
+    document = agent.generate(project.context)
+    
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate document with agent '{agent_name}'."
+        )
+    
+    # Update the context with the generated document
+    agent.update_context(project.context)
+    
+    return TextGenerationResponse(
+        status="success",
+        document=document,
+        agent_name=agent_name
+    )
+
+@router.post("/edit/{agent_name}")
+def edit_document(
+    agent_name: str,
+    prompt: str = Body(..., embed=True, description="Prompt for editing"),
+    attached_context: str = Body(..., embed=True, description="Context to attach to the document"),
+    project: Project = Depends(get_current_project)
+) -> TextGenerationResponse:
+    """
+    Edit a document using the specified agent.
+    """
+    agent = get_agent_instance(agent_name)
+    
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent '{agent_name}' not found."
+        )
+    
+    # Edit the document
+    edited_document = agent.edit(prompt, attached_context, project.context)
+    
+    if edited_document is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to edit document with agent '{agent_name}'."
+        )
+    
+    # Update the context with the edited document
+    agent.update_context(project.context)
+    
+    return TextGenerationResponse(
+        status="success",
+        document=edited_document,
+        agent_name=agent_name
+    )

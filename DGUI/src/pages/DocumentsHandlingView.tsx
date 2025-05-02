@@ -69,7 +69,7 @@ const DocumentsHandling: React.FC<DocumentsHandlingProps> = ({ switchTab }) => {
         try {
             const formData = new FormData();
             formData.append('file', file);
-
+            console.log('Uploading file:', formData);
             const uploadResponse = await fetch('http://localhost:5000/files/upload-excel', {
                 method: 'POST',
                 body: formData,

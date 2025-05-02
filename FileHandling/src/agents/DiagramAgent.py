@@ -5,8 +5,9 @@ from utils.Message import Message
 from jsonschema import validate, ValidationError
 from utils.Context import Context
 from agents.IAgent import IAgent
-from FileHandling.src.agents.schema.ClassDiagramSchema import JSON_CLASS_DIAGRAM_SCHEMA_STRING, VALIDATE_SCHEMA_CLASS_DIAGRAM
+from agents.schema.ClassDiagramSchema import JSON_CLASS_DIAGRAM_SCHEMA_STRING, VALIDATE_SCHEMA_CLASS_DIAGRAM
 import re
+from utils.Project import Project
 
 class DIAGRAM_TYPE:
     CLASS_DIAGRAM = "UML Class Diagram"
@@ -17,9 +18,13 @@ class DIAGRAM_TYPE:
 
 
 class ClassDiagramAgent(IAgent):
-    def __init__(self, model:str):
+    def __init__(self, name: str, model: str, project: Project = None):
+        self.name = name
         self.model = model
         self.message = Message()
+        self.diagram_type_str = None  # Initialize the diagram type
+        if project:
+            self.update_context(project.context)
 
     def _extract_json_content(self, content: str) -> Dict[str, Any]:
         # Look for JSON content that might be within ```json ... ``` blocks or standalone
@@ -133,10 +138,20 @@ Your thinking process...
             return None
     def update_context(self, context: Context) -> None:
         """Update the agent's context."""
-        init_message, _, diagram_type_str = self._init_info(context, diagram_type_str)
+        # Use a default diagram type if none is set
+        diagram_type = DIAGRAM_TYPE.CLASS_DIAGRAM if self.diagram_type_str is None else self.diagram_type_str
+        
+        # Pass the diagram type to _init_info
+        init_message, _, diagram_type_str = self._init_info(context, diagram_type)
+        
         if not init_message:
-            print("Initialization message is empty. Skipping generation.")
+            print("Initialization message is empty. Skipping update.")
             return None
+            
+        # Store the diagram type for future use
+        self.diagram_type_str = diagram_type_str
+        
+        # Update the message with the new context
         self.message.replace_init_message(init_message)
     def edit(self, prompt: str, attached_context: str, context: Context) -> str:
         if not prompt:

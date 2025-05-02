@@ -1,5 +1,4 @@
 # main.py
-from FileHandling.src.routers import agent
 import uvicorn
 from fastapi import FastAPI, Request, Response, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +6,8 @@ from contextlib import asynccontextmanager
 
 from config import settings # Import shared settings
 from dependencies import app_state # Import shared state
-from routers import projects, files # Import routers
+from routers import projects, files, agent # Import routers using relative paths
+
 # --- Lifespan Management (Optional but good practice) ---
 # Use lifespan events for setup/teardown if needed (e.g., database connections)
 # @asynccontextmanager
@@ -26,7 +26,8 @@ from routers import projects, files # Import routers
 app = FastAPI(
     title="Document Generation API",
     description="API for managing projects, processing Excel files, and generating documents using AI.",
-    version="1.0.0",
+    version="1.0.0"
+
 )
 
 
@@ -58,7 +59,7 @@ async def add_csp_header_middleware(request: Request, call_next):
         # Allow inline styles
         "style-src 'self' 'unsafe-inline'; "
          # Allow connections back to self (API) and potentially file protocol if scripts need it
-        "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 file:; " # Adjusted connect-src
+        "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 file: ; " # Adjusted connect-src
         # Allow framing by self (adjust if Electron needs different source)
         "frame-src 'self'; "
         # Allow images from self, data URIs, and blobs
@@ -80,7 +81,7 @@ async def debug_exception_handler(request: Request, exc: Exception):
     return Response(
         content="".join(
             traceback.format_exception(
-                etype=type(exc), value=exc, tb=exc.__traceback__
+                type(exc), exc, exc.__traceback__
             )
         )
     )
@@ -105,7 +106,8 @@ async def health_check():
 
 # --- Run the application ---
 if __name__ == "__main__":
-    print(f"Starting Uvicorn server on http://0.0.0.0:5000")
+    print(f"Starting Uvicorn server on http://127.0.0.1:5000")
     # Use reload=True for development, disable in production
     # turn on debug=True for more verbose output
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=5000, reload=True)
+

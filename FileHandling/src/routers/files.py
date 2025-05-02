@@ -2,7 +2,6 @@
 import os
 import shutil
 from typing import Annotated, Dict, List
-from agents.DocumentGeneration import GeneralAgent
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Body, status
 from werkzeug.utils import secure_filename # Still useful for sanitizing filenames
 from pathlib import Path
@@ -14,7 +13,7 @@ from models import (
     FileUploadResponse, SheetListResponse, SheetProcessingRequest,
     ProcessingResultResponse, ErrorResponse, ProcessingResultDetail
 )
-from dependencies import get_current_project, get_excel_handler, get_generator_instance
+from dependencies import get_current_project, get_excel_handler, get_agent_instance
 
 router = APIRouter(
     prefix="/files",
@@ -157,8 +156,7 @@ async def preview_sheet(
 async def process_excel(
     current_project: Annotated[Project, Depends(get_current_project)],
     excel_handler: Annotated[ExcelFileHandler, Depends(get_excel_handler)],
-    generator: Annotated[GeneralAgent, Depends(get_generator_instance)],
-    request_data: SheetProcessingRequest # Modified Pydantic model
+    request_data: SheetProcessingRequest 
 ):
     """
     Processes specified sheets from selected Excel files,
@@ -238,7 +236,6 @@ async def process_excel(
         details={"sheet_types_requested": {file_info.name: file_info.sheets for file_info in request_data.files}}
     )
     current_project.save_metadata()
-    generator.initialize_message()
 
     return ProcessingResultResponse(
         status="error" if has_error else "success",
