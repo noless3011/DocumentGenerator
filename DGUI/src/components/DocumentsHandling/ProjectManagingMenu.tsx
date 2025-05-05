@@ -97,12 +97,11 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
     return (
         <>
             <Button
-                variant="contained"
-                color="primary"
+                className='bg-transparent hover:bg-gray-200'
                 onClick={handleOpen}
                 startIcon={<FolderIcon />}
             >
-                Project Manager
+                Project
             </Button>
 
             <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>

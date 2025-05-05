@@ -1,20 +1,19 @@
 import React, { useEffect, useState } from 'react';
 
 interface PreviewAppViewProps {
-    project: any;
     fileDir?: string;
+    setLoading?: (loading: boolean) => void;
 }
 
-const PreviewAppView: React.FC<PreviewAppViewProps> = ({ project }) => {
+const PreviewAppView: React.FC<PreviewAppViewProps> = ({ fileDir, setLoading }) => {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
 
     useEffect(() => {
         const loadPreviewApp = async () => {
-            if (!project) return;
+            if (!fileDir) return;
 
-            setLoading(true);
+            if (setLoading) setLoading(true);
             setError(null);
 
             try {
@@ -29,7 +28,7 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ project }) => {
                 if (response.ok) {
                     // Preview exists, use it
                     setPreviewUrl(`http://localhost:5000/generate/preview`);
-                    setLoading(false);
+                    if (setLoading) setLoading(false);
                     return;
                 }
 
@@ -43,7 +42,7 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ project }) => {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        projectDir: `${project.project_dir}/output`
+                        projectDir: fileDir
                     }),
                 });
 
@@ -51,8 +50,7 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ project }) => {
                     throw new Error(`Failed to generate preview app: ${generateResponse.statusText}`);
                 }
 
-                // Generation succeeded, now load the preview
-                await new Promise(resolve => setTimeout(resolve, 500)); // Small delay to ensure file is ready
+                await new Promise(resolve => setTimeout(resolve, 500));
 
                 // Now try to load the preview again
                 setPreviewUrl(`http://localhost:5000/generate/preview`);
@@ -61,16 +59,12 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ project }) => {
                 setError(err instanceof Error ? err.message : 'Failed to load preview app');
                 console.error('Error with preview app:', err);
             } finally {
-                setLoading(false);
+                if (setLoading) setLoading(false);
             }
         };
 
         loadPreviewApp();
-    }, [project]);
-
-    if (loading) {
-        return <div>Loading preview...</div>;
-    }
+    }, [fileDir, setLoading]);
 
     if (error) {
         return <div className="error">{error}</div>;

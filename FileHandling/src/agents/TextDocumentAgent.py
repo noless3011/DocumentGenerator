@@ -13,7 +13,6 @@ class TextDocumentAgent(IAgent):
         self.model = model
         self.message = Message()
         
-        # Initialize with project context if provided
         if project:
             self.update_context(project.context)
 
@@ -118,22 +117,17 @@ The content of the document.
 
     def edit(self, prompt:str, attached_context: str, context:Context) -> str | None: # Added attached_context type hint and return type hint
         """Edit a document using the provided message and context."""
-        # Check if there's a conversation history to edit upon
         if len(self.message.messages) == 0:
             print("Cannot edit: No previous conversation history.")
             return None
-        # Basic validation checks (similar to generate)
         for key in context.requirements:
             if not context.requirements[key]:
                 print("Requirement key '%s' is empty during edit. Context might be incomplete.", key)
-                # Decide if you want to return None here or proceed with potentially incomplete info
-                # return None
+
         if not context.csv_description:
             print("CSV description is empty during edit. Context might be incomplete.")
-            # return None
-        self.update_context(context) # Update the context with the new document
-        # Add the user's edit request
-        # Consider adding attached_context if relevant for the edit prompt
+
+        self.update_context(context) 
         self.message.add_user_text(f"You must rewrite the *entire document* based on the previous response, following my instructions precisely. Remember to keep the ```markdown``` format with the title on the first line.\n\nMy instructions: {prompt}")
 
         try:
@@ -144,15 +138,14 @@ The content of the document.
             response_content = response.choices[0].message.content
             self.message.append_llm_response(response_content)
 
-            # Extract the updated content and name using the reusable method
             document_name, document_content = self._extract_markdown_content(response_content)
 
             if document_content and document_name:
                 return document_content
             else:
                 print("Could not extract markdown content from LLM response during edit.")
-                return None # Indicate failure if extraction fails
+                return None
 
         except Exception as e:
             print(f"Error during litellm completion or processing in edit: {e}")
-            return None # Return None on API error or other exceptions
+            return None 
