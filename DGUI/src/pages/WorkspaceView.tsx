@@ -3,65 +3,84 @@ import ChatView from './ChatView';
 import { useProjects } from '../provider/ProjectProvider';
 import { ChatProvider } from '../provider/ChatProvider';
 import { TabType, useWorkspace } from '../provider/WorkspaceProvider';
-import { ArrowBackIos } from '@mui/icons-material';
-
+import ExpolorerPane from '../components/ExplorerPane';
+import { AccountTree, ArrowBackIos, ChatBubble } from '@mui/icons-material';
 
 const WorkspaceView: React.FC = () => {
     const { currentProject: project } = useProjects();
     const { tabs, removeTab, activeTab, setActiveTab, addTab } = useWorkspace();
     const [chatPanelVisible, setChatPanelVisible] = useState<boolean>(true);
-    const [resultsWidth, setResultsWidth] = useState<number>(67); // 67% (2/3) initially
-    const [isDragging, setIsDragging] = useState<boolean>(false);
+    const [chatPanelWidthPx, setChatPanelWidthPx] = useState<number>(400);
+    const [explorerPanelWidthPx, setExplorerPanelWidthPx] = useState<number>(300);
+    const [explorerPanelVisible, setExplorerPanelVisible] = useState<boolean>(true);
+    const [isChatDividerDragging, setIsChatDividerDragging] = useState<boolean>(false);
+    const [isExplorerDividerDragging, setIsExplorerDividerDragging] = useState<boolean>(false);
     const containerRef = useRef<HTMLDivElement>(null);
-
+    const resizerWidth = 8;
 
     useEffect(() => {
-        if (tabs.length === 0) {
-            for (let i = 0; i < 1; i++) {
-                addTab('1', 'Diagram abasufhoaishjfiajfdijoaspdfjapsifdj', TabType.DIAGRAM);
-                addTab('2', 'Markdown', TabType.MARKDOWN);
-                addTab('3', 'Preview App', TabType.PROTOTYPE);
+        if (tabs.length === 0 && project) {
+            addTab('1', 'Diagram Example', TabType.DIAGRAM);
+            addTab('2', 'Markdown Notes', TabType.MARKDOWN);
+            addTab('3', 'Preview App Mockup', TabType.PROTOTYPE);
+            if (tabs.length > 0) {
+                setActiveTab(tabs[0].id);
+            } else {
+                setActiveTab('1');
             }
         }
-    }, []); // Empty dependency array means this runs once when component mounts
+    }, [project, addTab, setActiveTab, tabs]);
+
+
     const toggleChatPanel = () => {
         setChatPanelVisible(!chatPanelVisible);
+
     };
 
-    // Mouse event handlers for resizing
-    const handleMouseDown = (e: React.MouseEvent) => {
+    const toggleExplorerPanel = () => {
+        setExplorerPanelVisible(!explorerPanelVisible);
+    };
+
+    const handleDragExplorerDivider = (e: React.MouseEvent) => {
         e.preventDefault();
-        setIsDragging(true);
+        setIsExplorerDividerDragging(true);
+        if (!explorerPanelVisible) {
+            setExplorerPanelVisible(true);
+        }
     };
-
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (!isDragging || !containerRef.current) return;
+            if (!isExplorerDividerDragging || !containerRef.current || !explorerPanelVisible) return;
 
             const containerRect = containerRef.current.getBoundingClientRect();
             const containerWidth = containerRect.width;
-            const newWidth = ((e.clientX - 30 - containerRect.left) / containerWidth) * 100; // 30 is the padding, if dont minus 30, the handle will be snappy
 
-            // If dragged close to the right edge, collapse the chat panel completely
-            if (newWidth > 95) {
-                setChatPanelVisible(false);
-                setIsDragging(false);
+            const newExplorerWidth = e.clientX - containerRect.left;
+
+            const minExplorerWidth = 200;
+            const maxExplorerWidth = containerWidth * 0.8;
+
+            const collapseThreshold = 25;
+
+            if (newExplorerWidth < collapseThreshold) {
+                setExplorerPanelVisible(false);
+                setIsExplorerDividerDragging(false);
                 return;
             }
 
-            // Limit resize between 20% and 80%
-            const boundedWidth = Math.min(Math.max(newWidth, 20), 80);
-            setResultsWidth(boundedWidth);
+            const boundedWidth = Math.min(Math.max(newExplorerWidth, minExplorerWidth), maxExplorerWidth);
+            setExplorerPanelWidthPx(boundedWidth);
         };
 
         const handleMouseUp = () => {
-            setIsDragging(false);
+            if (isExplorerDividerDragging) {
+                setIsExplorerDividerDragging(false);
+            }
         };
 
-        if (isDragging) {
+        if (isExplorerDividerDragging) {
             document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-            // Add a class to the body to prevent text selection during drag
+            document.addEventListener('mouseup', handleMouseUp, { once: true });
             document.body.classList.add('resize-cursor');
         }
 
@@ -70,7 +89,59 @@ const WorkspaceView: React.FC = () => {
             document.removeEventListener('mouseup', handleMouseUp);
             document.body.classList.remove('resize-cursor');
         };
-    }, [isDragging]);
+    }, [isExplorerDividerDragging, explorerPanelVisible]);
+
+
+    const handleDragChatDivider = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsChatDividerDragging(true);
+        if (!chatPanelVisible) {
+            setChatPanelVisible(true);
+        }
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isChatDividerDragging || !containerRef.current || !chatPanelVisible) return;
+
+            const containerRect = containerRef.current.getBoundingClientRect();
+            const containerWidth = containerRect.width;
+
+            const newChatWidth = containerWidth - (e.clientX - containerRect.left);
+
+            const minChatWidth = 200;
+            const maxChatWidth = containerWidth * 0.8;
+
+            const collapseThreshold = 25;
+
+            if (newChatWidth < collapseThreshold) {
+                setChatPanelVisible(false);
+                setIsChatDividerDragging(false);
+                return;
+            }
+
+            const boundedWidth = Math.min(Math.max(newChatWidth, minChatWidth), maxChatWidth);
+            setChatPanelWidthPx(boundedWidth);
+        };
+
+        const handleMouseUp = () => {
+            if (isChatDividerDragging) {
+                setIsChatDividerDragging(false);
+            }
+        };
+
+        if (isChatDividerDragging) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp, { once: true });
+            document.body.classList.add('resize-cursor');
+        }
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.classList.remove('resize-cursor');
+        };
+    }, [isChatDividerDragging, chatPanelVisible]);
 
     if (!project) {
         return (
@@ -85,82 +156,120 @@ const WorkspaceView: React.FC = () => {
             </div>
         );
     }
-    // add 15 tab to test
+
+    const resultsPanelWidthStyle = chatPanelVisible
+        ? `calc(100% - ${chatPanelWidthPx + resizerWidth}px - ${explorerPanelWidthPx}px)` // Adjusted for explorer panel width
+        : `calc(100% - ${explorerPanelWidthPx}px)`;
 
     return (
-        // I truly dont know why i have to set the h-5% here, but if i set it to full, there will be a scroll bar on the right side of the chat panel, and i dont want that
-        <div className="flex flex-col h-[5%] w-full max-w-full bg-gray-50 flex-1">
-            <div className="flex flex-col h-full overflow-hidden">
-                <div ref={containerRef} className="flex flex-row h-full overflow-hidden relative">
+        // Removed h-[5%], using flex-1 and parent constraints for height.
+        <div className="flex flex-col w-full max-w-full bg-gray-50 flex-1 overflow-hidden">
+            <div ref={containerRef} className="flex flex-row h-full overflow-hidden relative">
+                {explorerPanelVisible ?
+                    (<div className="flex-shrink-0 h-full flex flex-col"
+                        style={{ width: `${explorerPanelWidthPx}px` }}>
+                        <ExpolorerPane>
 
-                    <div
-                        className="bg-white m-3 mb-10 h-[95%] overflow-hidden flex flex-col"
-                        style={{ width: chatPanelVisible ? `${resultsWidth}%` : '100%' }}
+                        </ExpolorerPane>
+                    </div>)
+                    :
+                    (<button
+                        title='Show explorer panel'
+                        className="absolute bottom-6 left-6 p-2 bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 transition-colors z-20"
+                        onClick={toggleExplorerPanel}
                     >
+                        <AccountTree style={{ fontSize: '1.25rem' }} />
+                    </button>)}
 
-                        <div className="flex flex-row items-center h-13 overflow-x-scroll scroll-smooth scrollbar scrollbar-h-1 scrollbar-thumb-indigo-500 bg-gray-50 px-2">
-                            {tabs.map((tab, index) => (
-                                <div
-                                    key={index}
-                                    className={`flex flex-row items-center w-fit max-w-60 border-solid border-r-0 border-2 px-4 py-2 cursor-pointer ${activeTab === tab.id ? 'border-gray-200 border-t-blue-800 border-b-0' : 'text-gray-700 border-x-0 border-t-0 hover:bg-blue-200 border-gray-200'
-                                        }`}
-                                    onClick={() => setActiveTab(tab.id)}
+                {explorerPanelVisible && (
+                    <div
+                        className={`w-2 h-full cursor-col-resize flex-shrink-0 hover:bg-blue-500 active:bg-blue-600 z-10 ${isExplorerDividerDragging ? 'bg-blue-500' : 'bg-gray-300'
+                            }`}
+                        onMouseDown={handleDragExplorerDivider}
+                        title="Resize panels"
+                    />
+                )}
+
+
+                <div
+                    className="bg-white m-3 mb-10 h-[calc(100%-40px)] flex flex-col overflow-hidden"
+                    style={{ width: resultsPanelWidthStyle }}
+                >
+                    {/* Tabs */}
+                    <div className="flex flex-row items-center h-13 overflow-x-auto scroll-smooth scrollbar scrollbar-h-1 scrollbar-thumb-indigo-500 bg-gray-50 px-2 flex-shrink-0">
+                        {tabs.map((tab) => (
+                            <div
+                                key={tab.id}
+                                className={`flex flex-row items-center w-fit max-w-60 border-solid border-r-0 border-2 px-4 py-2 cursor-pointer whitespace-nowrap ${activeTab === tab.id
+                                    ? 'border-gray-200 border-t-blue-800 border-b-0 bg-white'
+                                    : 'text-gray-700 border-x-0 border-t-0 hover:bg-blue-100 border-b-gray-200'
+                                    }`}
+                                onClick={() => setActiveTab(tab.id)}
+                            >
+                                <span className="truncate overflow-hidden" title={tab.title}>
+                                    {tab.title}
+                                </span>
+                                <button
+                                    className="ml-2 text-gray-500 hover:text-red-600 hover:bg-red-100 rounded-full p-0.5 text-xs leading-none flex items-center justify-center w-4 h-4"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeTab(tab.id);
+                                    }}
+                                    title={`Close ${tab.title}`}
                                 >
-                                    <span className="truncate whitespace-nowrap overflow-hidden">
-                                        {tab.title}
-                                    </span>
-                                    <button
-                                        className="ml-2 text-blue-800 text-lg font-bold rounded-full p-1"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            removeTab(tab.id);
-                                            console.log('Tab removed, current tabs: ', tabs);
-                                        }}
-                                    >
-                                        &times;
-                                    </button>
-                                </div>
-                            ))}
-
-                        </div>
-
-                        <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-scroll scroll-smooth scrollbar scrollbar-w-3 scrollbar-thumb-indigo-500/30 bg-white">
-                            {activeTab ? (
-                                // Find the active tab and render its content
-                                tabs.find(tab => tab.id === activeTab)?.content()
-                            ) : (
-                                <div className="flex items-center justify-center h-full">
-                                    <div className="text-center p-6">
-                                        <h3 className="text-xl font-semibold text-white mb-2">No Open Tabs</h3>
-                                        <p className="text-gray-200">Open a file from the file explorer to get started.</p>
-                                    </div>
-                                </div>
-                            )}
-
-
-                        </div>
+                                    ×
+                                </button>
+                            </div>
+                        ))}
                     </div>
 
-                    {chatPanelVisible && (
-                        <div
-                            className={`w-2 h-full cursor-col-resize hover:bg-blue-500 active:bg-blue-600 z-10 ${isDragging ? 'bg-blue-500' : 'bg-gray-300'
-                                }`}
-                            onMouseDown={handleMouseDown}
-                        />
-                    )}
-
-                    {chatPanelVisible ? (
-                        <ChatProvider><ChatView /></ChatProvider>
-                    ) : (
-                        <button
-                            title='Show chat panel'
-                            className="absolute bottom-6 right-6 p-2 bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 transition-colors z-10"
-                            onClick={toggleChatPanel}
-                        >
-                            <ArrowBackIos />
-                        </button>
-                    )}
+                    <div className="flex-1 flex flex-col p-6 overflow-y-auto scroll-smooth scrollbar scrollbar-w-2 scrollbar-thumb-indigo-500/30 bg-white">
+                        {activeTab ? (
+                            tabs.find(tab => tab.id === activeTab)?.content()
+                        ) : tabs.length > 0 ? (
+                            <div className="flex items-center justify-center h-full text-gray-500">Select a tab</div>
+                        ) : (
+                            <div className="flex items-center justify-center h-full">
+                                <div className="text-center p-6 text-gray-500">
+                                    <h3 className="text-lg font-semibold mb-2">No Open Tabs</h3>
+                                    <p>Open a file or create a new one to start.</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
+
+                {/* Resizer */}
+                {chatPanelVisible && (
+                    <div
+                        className={`w-2 h-full cursor-col-resize flex-shrink-0 hover:bg-blue-500 active:bg-blue-600 z-10 ${isChatDividerDragging ? 'bg-blue-500' : 'bg-gray-300'
+                            }`}
+                        onMouseDown={handleDragChatDivider}
+                        title="Resize panels"
+                    />
+                )}
+
+                {/* Chat Panel (Right Side) */}
+                {chatPanelVisible ? (
+                    <div
+                        className="flex-shrink-0 h-full flex flex-col"
+                        style={{ width: `${chatPanelWidthPx}px` }}
+                    >
+                        <ChatProvider>
+
+                            <ChatView />
+                        </ChatProvider>
+                    </div>
+                ) : (
+                    <button
+                        title='Show chat panel'
+                        className="absolute bottom-6 right-6 p-2 bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 transition-colors z-20"
+                        onClick={toggleChatPanel}
+                    >
+                        <ChatBubble style={{ fontSize: '1.25rem' }} />
+                    </button>
+                )}
+
             </div>
         </div>
     );
