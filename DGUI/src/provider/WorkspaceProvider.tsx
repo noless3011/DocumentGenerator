@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import Tab from '../components/Tab';
 
-export enum TabType {
+export enum DocumentType {
     DIAGRAM = 'diagram',
     MARKDOWN = 'markdown',
     PROTOTYPE = 'prototype',
@@ -11,15 +11,15 @@ export interface Tab {
     id: string;
     title: string;
     filePath: string;
-    content: () => ReactNode;
+    content: ReactNode; // Changed from () => ReactNode
 }
 
 interface WorkspaceContextValue {
     tabs: Tab[];
     activeTab: string | null;
     setActiveTab: (tabId: string | null) => void;
-    removeTab: (filePath: string) => void;
-    addTab: (id: string, filePath: string, tabType: TabType) => void;
+    removeTab: (tabId: string) => void; // Changed from filePath: string
+    addTab: (id: string, filePath: string, tabType: DocumentType) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | undefined>(undefined);
@@ -39,17 +39,32 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         setActiveTab: (tabId: string | null) => {
             setActiveTab(tabId);
         },
-        removeTab: (filePath: string) => {
-            setTabs((prevTabs) => prevTabs.filter((tab) => tab.filePath !== filePath));
+        removeTab: (tabId: string) => {
+            setTabs((prevTabs) => {
+                const newTabs = prevTabs.filter((tab) => tab.id !== tabId);
+                // If the removed tab was the active one, update activeTab
+                if (activeTab === tabId) {
+                    setActiveTab(newTabs.length > 0 ? newTabs[0].id : null);
+                }
+                return newTabs;
+            });
         },
-        addTab: (id: string, filePath: string, tabType: TabType) => {
-            const newTab = {
+        addTab: (id: string, filePath: string, tabType: DocumentType) => {
+            // Check if tab already exists
+            const existingTab = tabs.find(tab => tab.id === id);
+            if (existingTab) {
+                setActiveTab(id); // If exists, just make it active
+                return;
+            }
+
+            const newTabDefinition: Tab = {
                 id: id,
-                title: filePath.split('/').pop() || 'Untitled',
+                title: filePath.split(/[\\/]/).pop() || filePath || 'Untitled', // Use regex for path separators
                 filePath,
-                content: () => <Tab label={filePath} filePath={filePath} type={tabType} />,
+                content: <Tab label={filePath} filePath={filePath} type={tabType} />, // Store instance directly
             };
-            setTabs((prevTabs) => [...prevTabs, newTab]);
+            setTabs((prevTabs) => [...prevTabs, newTabDefinition]);
+            setActiveTab(id); // Make the new tab active
         },
 
     }

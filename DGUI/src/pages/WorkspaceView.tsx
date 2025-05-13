@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import ChatView from './ChatView';
 import { useProjects } from '../provider/ProjectProvider';
 import { ChatProvider } from '../provider/ChatProvider';
-import { TabType, useWorkspace } from '../provider/WorkspaceProvider';
-import ExpolorerPane from '../components/ExplorerPane';
+import { DocumentType, useWorkspace } from '../provider/WorkspaceProvider';
+import ExplorerPane from '../components/ExplorerPane';
 import { AccountTree, ArrowBackIos, ChatBubble } from '@mui/icons-material';
 
 const WorkspaceView: React.FC = () => {
@@ -18,18 +18,6 @@ const WorkspaceView: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const resizerWidth = 8;
 
-    useEffect(() => {
-        if (tabs.length === 0 && project) {
-            addTab('1', 'Diagram Example', TabType.DIAGRAM);
-            addTab('2', 'Markdown Notes', TabType.MARKDOWN);
-            addTab('3', 'Preview App Mockup', TabType.PROTOTYPE);
-            if (tabs.length > 0) {
-                setActiveTab(tabs[0].id);
-            } else {
-                setActiveTab('1');
-            }
-        }
-    }, [project, addTab, setActiveTab, tabs]);
 
 
     const toggleChatPanel = () => {
@@ -162,15 +150,18 @@ const WorkspaceView: React.FC = () => {
         : `calc(100% - ${explorerPanelWidthPx}px)`;
 
     return (
-        // Removed h-[5%], using flex-1 and parent constraints for height.
         <div className="flex flex-col w-full max-w-full bg-gray-50 flex-1 overflow-hidden">
             <div ref={containerRef} className="flex flex-row h-full overflow-hidden relative">
                 {explorerPanelVisible ?
                     (<div className="flex-shrink-0 h-full flex flex-col"
                         style={{ width: `${explorerPanelWidthPx}px` }}>
-                        <ExpolorerPane>
-
-                        </ExpolorerPane>
+                        <ExplorerPane
+                            onFileSelect={(fileId, filePath, fileType) => {
+                                // Convert fileType string to TabType enum
+                                const tabType = fileType.toUpperCase() as keyof typeof DocumentType;
+                                addTab(fileId, filePath, DocumentType[tabType]);
+                            }}
+                        />
                     </div>)
                     :
                     (<button
@@ -225,7 +216,7 @@ const WorkspaceView: React.FC = () => {
 
                     <div className="flex-1 flex flex-col p-6 overflow-y-auto scroll-smooth scrollbar scrollbar-w-2 scrollbar-thumb-indigo-500/30 bg-white">
                         {activeTab ? (
-                            tabs.find(tab => tab.id === activeTab)?.content()
+                            tabs.find(tab => tab.id === activeTab)?.content
                         ) : tabs.length > 0 ? (
                             <div className="flex items-center justify-center h-full text-gray-500">Select a tab</div>
                         ) : (

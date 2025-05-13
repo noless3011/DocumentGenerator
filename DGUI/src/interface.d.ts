@@ -12,6 +12,9 @@ export interface IMyAPI {
     html: string[],
   }>
   readJsonFile: (path: string) => Promise<any>
+  watchFile: (filePath: string) => Promise<void>;
+  unwatchFile: (filePath: string) => Promise<void>;
+  onFileChange: (callback: (filePath: string) => void) => () => void;
 }
 
 declare global {

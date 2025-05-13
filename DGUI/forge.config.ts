@@ -41,7 +41,7 @@ const config: ForgeConfig = {
         liveReload: true,
         headers: {
           // 'Access-Control-Allow-Origin': '*',
-            'Content-Security-Policy': "default-src 'self'; connect-src 'self' http://localhost:5000; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' http://localhost:5000;",
+            'Content-Security-Policy': "default-src 'self'; connect-src 'self' http://localhost:5000 ws://localhost:5000; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' http://localhost:5000 ws://localhost:5000;",
             'Access-Control-Allow-Origin': '*',
 
         },

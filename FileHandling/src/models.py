@@ -12,14 +12,15 @@ class ProjectCreateRequest(BaseModel):
     base_dir: str = Field(..., description="Base directory where project folder will be created")
 
 class ProjectInfo(BaseModel):
-    id: str
     name: str
-    base_dir: str
-    created_date: datetime # Store as datetime, handle isoformat during serialization if needed
-    modified_date: datetime # Store as datetime
-    project_dir: str
-    files: Optional[Dict[str, List[Dict[str, str]]]] = None # Optional file list
-
+    id: str
+    created_date: datetime
+    modified_date: datetime
+    description: str
+    tags: List[str]
+    directories: Dict[str, str]
+    files: Dict[str, List[Dict[str, str]]] 
+    processing_history: List[Dict[str, Any]]
 class ProjectListItem(BaseModel):
     id: str
     name: str

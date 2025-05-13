@@ -35,31 +35,32 @@ async def upload_excel(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file selected")
 
     if not allowed_file(file.filename):
-         raise HTTPException(
-             status_code=status.HTTP_400_BAD_REQUEST,
-             detail=f"Invalid file type for '{file.filename}'. Allowed types are: {', '.join(settings.ALLOWED_UPLOAD_EXTENSIONS)}"
-         )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type for '{file.filename}'. Allowed types are: {', '.join(settings.ALLOWED_UPLOAD_EXTENSIONS)}"
+        )
 
     original_filename = secure_filename(file.filename) # Sanitize
-    # Ensure input directory exists (Project class should handle this, but double-check)
-    input_dir = Path(current_project.input_dir)
-    input_dir.mkdir(parents=True, exist_ok=True)
+    
+    input_dir_path = Path(current_project.input_dir)
+    input_dir_path.mkdir(parents=True, exist_ok=True)
+    destination_path_str = str(input_dir_path / original_filename)
 
-    file_path = input_dir / original_filename
-    destination_path_str = str(file_path)
+    created_successfully = await current_project.create_file(original_filename, "input")
+    if not created_successfully:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create and record file '{original_filename}' in project."
+        )
 
     try:
-        # Save the uploaded file efficiently
         with open(destination_path_str, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not save file: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not save file content: {e}")
     finally:
-        await file.close() # Important to close the file handle
-
-    # Add file to project tracking and save metadata
-    current_project.add_file(destination_path_str, "input")
-    current_project.save_metadata()
+        await file.close()
+    await current_project.save_metadata()
 
     return FileUploadResponse(
         status="success",
@@ -162,7 +163,7 @@ async def process_excel(
     Processes specified sheets from selected Excel files,
     saving them as CSV or images in the processed directory based on the request.
     """
-    current_project.scan_and_update_files() # Ensure file list is current
+    await current_project.scan_and_update_files() # Ensure file list is current
     output_dir = Path(current_project.processed_dir)
     output_dir.mkdir(parents=True, exist_ok=True) # Ensure output dir exists
     
@@ -226,16 +227,17 @@ async def process_excel(
 
     # Add successfully processed files to the project metadata under 'processed' type
     for f_info in processed_output_files:
-        current_project.add_file(f_info['path'], "processed") # Use 'processed' category
+        # get the file name from the path with the extension
+        processed_file_name = Path(f_info['path']).name
+        await current_project.create_file(processed_file_name, "processed") # Use 'processed' category
 
-    # Add a record of this processing operation
-    current_project.add_processing_record(
+    await current_project.add_processing_record(
         operation="excel_processing",
-        input_files=[file_info.path for file_info in request_data.files], # Log requested input files
-        output_files=processed_output_files, # Log only successfully created outputs
+        input_files=[file_info.path for file_info in request_data.files], 
+        output_files=processed_output_files,
         details={"sheet_types_requested": {file_info.name: file_info.sheets for file_info in request_data.files}}
     )
-    current_project.save_metadata()
+    await current_project.save_metadata()
 
     return ProcessingResultResponse(
         status="error" if has_error else "success",

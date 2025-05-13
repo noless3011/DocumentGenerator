@@ -11,11 +11,10 @@ interface DiagramViewProps {
 const DiagramView: React.FC<DiagramViewProps> = ({ fileDir, setLoading }) => {
     const [diagram, setDiagram] = useState<any>(null);
 
-    useEffect(() => {
+    const loadDiagram = useCallback(() => {
         if (setLoading) {
             setLoading(true);
         }
-
         window.myAPI.readFileAsText(fileDir).then((data: string) => {
             const jsonData = JSON.parse(data);
             if (jsonData.diagramType === "UML Class Diagram") {
@@ -34,6 +33,25 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir, setLoading }) => {
             }
         });
     }, [fileDir, setLoading]);
+
+    useEffect(() => {
+        loadDiagram();
+
+        window.myAPI.watchFile(fileDir);
+        const removeFileChangeListener = window.myAPI.onFileChange((changedFilePath: string) => {
+            if (changedFilePath === fileDir) {
+                console.log(`Diagram file ${fileDir} changed, reloading.`);
+                loadDiagram();
+            }
+        });
+
+        return () => {
+            window.myAPI.unwatchFile(fileDir);
+            if (removeFileChangeListener) {
+                removeFileChangeListener();
+            }
+        };
+    }, [fileDir, loadDiagram]);
 
     return <div className='w-full h-full'>
         {diagram}

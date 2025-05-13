@@ -35,7 +35,7 @@ app = FastAPI(
 # Allows requests from your frontend (e.g., Electron app, web browser)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5000", "http://127.0.0.1:5000", "http://localhost:3000"], # Be more specific in production (e.g., ["http://localhost:3000", "file://*"])
+    allow_origins=["http://localhost:3000", "http://localhost:5000", "http://127.0.0.1:3000"],  # Allows your frontend origin
     allow_credentials=True,
     allow_methods=["*"], # Allows all methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["*"], # Allows all headers
@@ -59,16 +59,13 @@ async def add_csp_header_middleware(request: Request, call_next):
         # Allow inline styles
         "style-src 'self' 'unsafe-inline'; "
          # Allow connections back to self (API) and potentially file protocol if scripts need it
-        "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 file: ; " # Adjusted connect-src
+        "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 ws://localhost:5000 wss://localhost:5000 file: ; " # Adjusted connect-src
         # Allow framing by self (adjust if Electron needs different source)
         "frame-src 'self'; "
         # Allow images from self, data URIs, and blobs
         "img-src 'self' data: blob:; "
         # Allow forms to submit to self
         "form-action 'self';"
-        # Explicitly disallow framing by others if needed (frame-src handles 'self' already)
-        # "frame-ancestors 'none';" # Use if you don't want *any* framing
-        # "frame-ancestors 'self';" # Allow only self-framing (might cover file://)
     )
     print(f"Setting CSP: {csp}")
     response.headers['Content-Security-Policy'] = csp
