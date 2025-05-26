@@ -1,9 +1,9 @@
 import { getBezierPath, BaseEdge, type EdgeProps, type Edge, getSmoothStepPath, useInternalNode, InternalNode, Node, Position, MarkerType, EdgeLabelRenderer } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 
-// filepath: d:\ProgrammingProjects\Javascript\DocumentGenerator\DGUI\src\components\DiagramComponents\DatabaseDiagram\TableEdge.tsx
 
-// enum naming convention for database relationship types
+
+
 export enum EdgeTypes {
     OneToOne = "OneToOne",
     OneToMany = "OneToMany",
@@ -14,10 +14,10 @@ export enum EdgeTypes {
 
 type TableEdgeProps = Edge<{ type: EdgeTypes; label?: string }, 'default'>;
 
-// --- Helper functions (keep as they are, they handle floating connections well) ---
+
 
 function getCenter(node: InternalNode<Node>) {
-    // Ensure dimensions are available, provide defaults if not
+
     const width = node.measured?.width ?? node.width ?? 0;
     const height = node.measured?.height ?? node.height ?? 0;
     const x = node.internals.positionAbsolute.x ?? 0;
@@ -30,22 +30,22 @@ function getCenter(node: InternalNode<Node>) {
 }
 
 function getHandleCoordsByPosition(node: InternalNode<Node>, handlePosition: Position) {
-    // Defensive checks for node internals
+
     if (!node?.internals?.handleBounds?.source || !node.internals.positionAbsolute || !node.measured) {
         console.warn('Node data incomplete for getHandleCoordsByPosition:', node);
-        // Return center as a fallback
+
         const center = getCenter(node);
         return [center.x, center.y];
     }
 
-    // all handles are from type source, that's why we use handleBounds.source here
+
     const handle = node.internals.handleBounds.source.find(
         (h) => h.position === handlePosition,
     );
 
-    // Fallback if specific handle position isn't found (e.g., node definition missing handles)
+
     if (!handle) {
-        // Fallback to using the node center or edge
+
         const center = getCenter(node);
         const width = node.measured.width ?? 0;
         const height = node.measured.height ?? 0;
@@ -57,16 +57,16 @@ function getHandleCoordsByPosition(node: InternalNode<Node>, handlePosition: Pos
             case Position.Right: return [absX + width, center.y];
             case Position.Top: return [center.x, absY];
             case Position.Bottom: return [center.x, absY + height];
-            default: return [center.x, center.y]; // Should not happen
+            default: return [center.x, center.y];
         }
     }
 
     let offsetX = handle.width / 2;
     let offsetY = handle.height / 2;
 
-    // this is a tiny detail to make the markerEnd of an edge visible.
-    // The handle position that gets calculated has the origin top-left, so depending which side we are using, we add a little offset
-    // when the handlePosition is Position.Right for example, we need to add an offset as big as the handle itself in order to get the correct position
+
+
+
     switch (handlePosition) {
         case Position.Left:
             offsetX = 0;
@@ -88,7 +88,7 @@ function getHandleCoordsByPosition(node: InternalNode<Node>, handlePosition: Pos
     return [x, y];
 }
 
-// Calculates the closest side of a node for connection
+
 function getClosestSide(source: InternalNode<Node>, target: InternalNode<Node>): Position {
     const centerSource = getCenter(source);
     const centerTarget = getCenter(target);
@@ -105,7 +105,7 @@ function getClosestSide(source: InternalNode<Node>, target: InternalNode<Node>):
 
 export function getEdgeParams(sourceNode: InternalNode<Node>, targetNode: InternalNode<Node>) {
     const sourcePos = getClosestSide(sourceNode, targetNode);
-    const targetPos = getClosestSide(targetNode, sourceNode); // Use the *opposite* perspective for the target
+    const targetPos = getClosestSide(targetNode, sourceNode);
 
     const [sx, sy] = getHandleCoordsByPosition(sourceNode, sourcePos);
     const [tx, ty] = getHandleCoordsByPosition(targetNode, targetPos);
@@ -120,21 +120,21 @@ export function getEdgeParams(sourceNode: InternalNode<Node>, targetNode: Intern
     };
 }
 
-// --- Custom Edge Component ---
+
 
 export default function TableEdge({
     id,
     source,
     target,
     data,
-    style, // Pass standard style props
-    interactionWidth = 10, // Default interaction width
+    style,
+    interactionWidth = 10,
 }: TableEdgeProps) {
     const sourceNode = useInternalNode(source);
     const targetNode = useInternalNode(target);
 
     if (!sourceNode?.internals?.positionAbsolute || !targetNode?.internals?.positionAbsolute || !sourceNode.measured || !targetNode.measured) {
-        // Nodes or their positions/dimensions aren't fully initialized yet
+
         return null;
     }
 
@@ -147,20 +147,20 @@ export default function TableEdge({
         targetPosition: targetPos,
         targetX: tx,
         targetY: ty,
-        curvature: 0.2, // Adjust curvature as needed
+        curvature: 0.2,
     });
 
-    // Determine style and markers based on edge type
-    const edgeType = data?.type ?? EdgeTypes.Reference; // Default to Reference
+
+    const edgeType = data?.type ?? EdgeTypes.Reference;
     let markerStartUrl = '';
     let markerEndUrl = '';
 
-    // Define marker IDs for database relationships
+
     const markerIds = {
         one: 'db-one',
         many: 'db-many',
-        zero: 'db-zero', // Optional: for zero relationships if needed
-        arrow: 'db-arrow', // For reference relationships
+        zero: 'db-zero',
+        arrow: 'db-arrow',
     }
 
     switch (edgeType) {
@@ -248,7 +248,7 @@ export default function TableEdge({
                 id={id + '-interaction'}
                 d={edgePath}
                 fill="none"
-                strokeOpacity={0} // Make transparent
+                strokeOpacity={0}
                 strokeWidth={interactionWidth}
                 className="react-flow__edge-interaction"
             />
@@ -260,7 +260,7 @@ export default function TableEdge({
                 d={edgePath}
                 markerStart={markerStartUrl}
                 markerEnd={markerEndUrl}
-                style={style} // Apply standard styles (stroke color, width etc.)
+                style={style}
             />
 
             <EdgeLabelRenderer>
@@ -273,7 +273,7 @@ export default function TableEdge({
                         padding: '2px 5px',
                         fontSize: 10,
                         fontWeight: 500,
-                        pointerEvents: 'all', // Allow interaction with label
+                        pointerEvents: 'all',
                     }}
                     className="nodrag nopan"
                 >

@@ -6,30 +6,42 @@ interface MessageComponentProps {
 }
 
 const MessageComponent: React.FC<MessageComponentProps> = ({ message }) => {
-    // Format the timestamp
+
     const formattedTime = new Date(message.timestamp).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
     });
 
+    const isUser = message.sender === 'user';
+    const isAssistant = message.sender === 'assistant';
+    const isSystem = message.sender === 'system';
+
+    let bgColor = 'bg-gray-100 text-gray-800';
+    let textAlign = 'justify-start';
+    let senderName = 'Assistant';
+
+    if (isUser) {
+        bgColor = 'bg-blue-500 text-white';
+        textAlign = 'justify-end';
+        senderName = 'You';
+    } else if (isSystem) {
+        bgColor = 'bg-yellow-100 text-yellow-800';
+        senderName = 'System';
+    }
+
     return (
         <div
-            className={`flex my-2 px-4 ${message.sender === 'user' ? 'justify-end' : 'justify-start'
-                }`}
+            className={`flex my-2 px-2 ${textAlign}`}
             key={message.id}
         >
             <div
-                className={`max-w-3xl rounded-lg px-4 py-2 ${message.sender === 'user'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-800'
-                    }`}
+                className={`max-w-xl md:max-w-2xl rounded-lg px-4 py-2 shadow-sm ${bgColor}`}
             >
-                <div className="message-content whitespace-pre-wrap">
+                <div className="message-content whitespace-pre-wrap break-words">
                     {message.content}
                 </div>
-                <div className={`text-xs mt-1 text-right ${message.sender === 'user' ? 'text-blue-100' : 'text-gray-500'
-                    }`}>
-                    {formattedTime}
+                <div className={`text-xs mt-1 ${isUser ? 'text-blue-100 text-right' : 'text-gray-500 text-left'}`}>
+                    {senderName} - {formattedTime}
                 </div>
             </div>
         </div>

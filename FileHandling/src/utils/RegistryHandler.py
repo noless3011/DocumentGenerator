@@ -1,8 +1,7 @@
-# utils/RegistryHandler.py
 import json
 from pathlib import Path
 from typing import List, Dict, Any
-from config import settings # Import the settings instance
+from config import settings 
 
 def save_projects_registry(projects_list: List[Dict[str, Any]]):
     """Save projects list to registry file."""
@@ -11,7 +10,7 @@ def save_projects_registry(projects_list: List[Dict[str, Any]]):
             json.dump(projects_list, f, indent=4)
     except Exception as e:
         print(f"Error writing projects registry: {e}")
-        # Consider more robust error handling/logging
+        
 
 def load_projects_registry() -> List[Dict[str, Any]]:
     """Load projects list from registry file."""
@@ -20,12 +19,12 @@ def load_projects_registry() -> List[Dict[str, Any]]:
     try:
         with open(settings.PROJECTS_REGISTRY_FILE, 'r', encoding='utf-8') as f:
             content = f.read()
-            if not content: # Handle empty file case
+            if not content: 
                 return []
             return json.loads(content)
     except json.JSONDecodeError as e:
         print(f"Error decoding projects registry JSON: {e}")
-        # Optionally: backup the corrupt file and return empty list
+        
         return []
     except Exception as e:
         print(f"Error reading projects registry: {e}")

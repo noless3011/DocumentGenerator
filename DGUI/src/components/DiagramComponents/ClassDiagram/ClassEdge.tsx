@@ -10,7 +10,7 @@ type ClassEdgeData = {
 
 type ClassEdge = Edge<ClassEdgeData, 'default'>;
 
-// Marker IDs definition
+
 const MARKER_IDS = {
     hollowTriangle: 'uml-hollow-triangle',
     hollowDiamond: 'uml-hollow-diamond',
@@ -18,7 +18,7 @@ const MARKER_IDS = {
     openArrow: 'uml-open-arrow',
 };
 
-// Helper function to render multiplicity labels
+
 const renderMultiplicityLabel = (
     multiplicity: string | undefined,
     position: { x: number, y: number },
@@ -60,7 +60,6 @@ const renderMultiplicityLabel = (
                 onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
-                    console.log('Multiplicity label clicked!');
                     onClick();
                 }}
             >
@@ -70,7 +69,7 @@ const renderMultiplicityLabel = (
     );
 };
 
-// Determine edge style based on relationship type
+
 const getEdgeStyle = (edgeType: RelationshipType, style?: React.CSSProperties) => {
     let strokeDasharray = 'none';
     let markerStartUrl = '';
@@ -94,13 +93,13 @@ const getEdgeStyle = (edgeType: RelationshipType, style?: React.CSSProperties) =
         case RelationshipType.Composition:
             markerStartUrl = `url(#${MARKER_IDS.filledDiamond})`;
             break;
-        // Association and default case - simple line
+
     }
 
     return { strokeDasharray, markerStartUrl, markerEndUrl };
 };
 
-// Calculate node center
+
 const getCenter = (node: any) => {
     const width = node.measured?.width ?? node.width ?? 0;
     const height = node.measured?.height ?? node.height ?? 0;
@@ -110,7 +109,7 @@ const getCenter = (node: any) => {
     return { x: x + width / 2, y: y + height / 2 };
 };
 
-// Get handle coordinates by position
+
 const getHandleCoordsByPosition = (node: any, handlePosition: Position) => {
     if (!node?.internals?.handleBounds?.source || !node.internals.positionAbsolute || !node.measured) {
         const center = getCenter(node);
@@ -161,7 +160,7 @@ const getHandleCoordsByPosition = (node: any, handlePosition: Position) => {
     return [x, y];
 };
 
-// Determine closest side for connection
+
 const getClosestSide = (source: any, target: any): Position => {
     const centerSource = getCenter(source);
     const centerTarget = getCenter(target);
@@ -176,7 +175,7 @@ const getClosestSide = (source: any, target: any): Position => {
     }
 };
 
-// Get edge parameters
+
 const getEdgeParams = (sourceNode: any, targetNode: any) => {
     const sourcePos = getClosestSide(sourceNode, targetNode);
     const targetPos = getClosestSide(targetNode, sourceNode);
@@ -187,7 +186,7 @@ const getEdgeParams = (sourceNode: any, targetNode: any) => {
     return { sx, sy, tx, ty, sourcePos, targetPos };
 };
 
-// Position multiplicity labels
+
 const getMultiplicityPosition = (x: number, y: number, handlePosition: Position, offset: number = 15) => {
     switch (handlePosition) {
         case Position.Left:
@@ -209,7 +208,7 @@ const ClassEdge = ({ id, source, target, data, style, interactionWidth = 10 }: E
     const targetNode = useInternalNode(target);
     const { updateRelationship } = useDiagramContext();
 
-    // Add state for editing multiplicity
+
     const [editingSource, setEditingSource] = useState(false);
     const [editingTarget, setEditingTarget] = useState(false);
     const [sourceMultiplicityValue, setSourceMultiplicityValue] = useState(data?.relationship.fromMultiplicity || '');
@@ -218,13 +217,13 @@ const ClassEdge = ({ id, source, target, data, style, interactionWidth = 10 }: E
     const sourceInputRef = useRef<HTMLInputElement>(null);
     const targetInputRef = useRef<HTMLInputElement>(null);
 
-    // Update local state when props change
+
     useEffect(() => {
         setSourceMultiplicityValue(data?.relationship.fromMultiplicity || '');
         setTargetMultiplicityValue(data?.relationship.toMultiplicity || '');
     }, [data?.relationship.fromMultiplicity, data?.relationship.toMultiplicity]);
 
-    // Handle click outside to end editing
+
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (sourceInputRef.current && !sourceInputRef.current.contains(event.target as Node)) {
@@ -241,7 +240,7 @@ const ClassEdge = ({ id, source, target, data, style, interactionWidth = 10 }: E
         };
     }, [sourceMultiplicityValue, targetMultiplicityValue]);
 
-    // Save handlers
+
     const saveSourceEdit = () => {
         if (editingSource) {
             setEditingSource(false);
@@ -264,7 +263,7 @@ const ClassEdge = ({ id, source, target, data, style, interactionWidth = 10 }: E
         }
     };
 
-    // Key handlers
+
     const handleSourceKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             saveSourceEdit();
@@ -285,7 +284,7 @@ const ClassEdge = ({ id, source, target, data, style, interactionWidth = 10 }: E
 
     if (!sourceNode?.internals?.positionAbsolute || !targetNode?.internals?.positionAbsolute ||
         !sourceNode.measured || !targetNode.measured) {
-        return null; // Nodes not fully initialized yet
+        return null;
     }
 
     const { sx, sy, tx, ty, sourcePos, targetPos } = getEdgeParams(sourceNode, targetNode);
@@ -300,11 +299,11 @@ const ClassEdge = ({ id, source, target, data, style, interactionWidth = 10 }: E
         curvature: 0.2,
     });
 
-    // Style and markers based on relationship type
+
     const edgeType = data?.relationship.type ?? RelationshipType.Association;
     const edgeStyle = getEdgeStyle(edgeType, style);
 
-    // Calculate positions for multiplicity labels
+
     const sourceMultiplicityPos = getMultiplicityPosition(sx, sy, sourcePos, 20);
     const targetMultiplicityPos = getMultiplicityPosition(tx, ty, targetPos, 20);
 

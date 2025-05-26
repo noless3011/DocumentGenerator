@@ -56,6 +56,7 @@
     "@fontsource/roboto": "^5.2.5",
     "@mui/icons-material": "^6.4.8",
     "@mui/material": "^6.4.8",
+    "@uiw/react-md-editor": "^4.0.6",
     "@xyflow/react": "^12.5.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import '@xyflow/react/dist/base.css';
 import {
     ReactFlow,
@@ -9,6 +9,7 @@ import {
     FitViewOptions,
     DefaultEdgeOptions,
     EdgeMouseHandler,
+
 } from '@xyflow/react';
 import ClassNode from './ClassDiagram/ClassNode';
 import ClassEdge from './ClassDiagram/ClassEdge';
@@ -16,7 +17,7 @@ import { Button, Menu, MenuItem } from '@mui/material';
 import EdgeTypeMenu from './ClassDiagram/EdgeTypeMenu';
 import { ClassDiagram, RelationshipType } from '../../models/ClassDiagram';
 import { useDiagramContext, ClassDiagramProvider } from '../../provider/diagram_providers/ClassDiagramProvider';
-import { autoArrange, gridLayout, circleLayout, LayoutOptions } from '../../utils/Arrange';
+import { autoArrange, gridLayout, circleLayout, forceDirectedLayout, LayoutOptions } from '../../utils/Arrange';
 
 const nodeTypes = {
     class: ClassNode,
@@ -41,11 +42,12 @@ interface ClassDiagramCanvasProps {
     fileDir?: string;
 }
 
-// This is the inner component that uses the context
+
 const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
     const canvas = useRef<HTMLDivElement>(null);
     const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
     const [arrangeMenu, setArrangeMenu] = useState<{ top: number; left: number } | null>(null);
+
 
     const {
         nodes,
@@ -58,8 +60,14 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
         deleteEdge,
         addClassNode,
         saveDiagram,
-        setNodes
+        setNodes,
+
+
     } = useDiagramContext();
+
+
+
+
 
     const onEdgeContextMenu: EdgeMouseHandler = useCallback((event, edge) => {
         event.preventDefault();
@@ -97,7 +105,12 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
 
     const handleSave = useCallback(() => {
         if (fileDir) {
-            saveDiagram(fileDir);
+            saveDiagram(fileDir)
+                .catch(err => {
+                    console.error('Error saving diagram or geometry from canvas:', err);
+                });
+        } else {
+            console.warn('Save clicked, but no fileDir is specified. Diagram not saved.');
         }
     }, [fileDir, saveDiagram]);
 
@@ -115,6 +128,9 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
         switch (layoutType) {
             case 'auto':
                 arrangedNodes = autoArrange(nodes, edges, options);
+                break;
+            case 'force':
+                arrangedNodes = forceDirectedLayout(nodes, edges, options);
                 break;
             case 'grid':
                 arrangedNodes = gridLayout(nodes, options);
@@ -159,7 +175,7 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
                         Arrange
                     </Button>
                     <br />
-                    <Button variant="contained" onClick={handleSave}>
+                    <Button variant="contained" onClick={handleSave} disabled={!fileDir}>
                         Save
                     </Button>
                 </Controls>
@@ -198,6 +214,7 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
                             <MenuItem onClick={() => handleArrange('auto')}>Auto Arrange</MenuItem>
                             <MenuItem onClick={() => handleArrange('grid')}>Grid Layout</MenuItem>
                             <MenuItem onClick={() => handleArrange('circle', { centerX: 500, centerY: 300 })}>Circle Layout</MenuItem>
+                            <MenuItem onClick={() => handleArrange('force')}>Force Directed Layout</MenuItem>
                         </Menu>
                     </div>
                 )}
@@ -206,10 +223,14 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
     );
 };
 
-// This is the wrapper component that provides the context
+
 const ClassDiagramCanvas: React.FC<ClassDiagramCanvasProps> = ({ diagram, fileDir }) => {
+
+
+
+    const providerKey = fileDir || diagram.diagramName || 'new-diagram';
     return (
-        <ClassDiagramProvider initialDiagram={diagram}>
+        <ClassDiagramProvider key={providerKey} initialDiagram={diagram} fileDir={fileDir}>
             <ClassDiagramCanvasInner fileDir={fileDir} />
         </ClassDiagramProvider>
     );

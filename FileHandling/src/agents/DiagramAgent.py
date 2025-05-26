@@ -146,7 +146,7 @@ Your thinking process...
         
         if not init_message:
             print("Initialization message is empty. Skipping update.")
-            return None
+            return
             
         # Store the diagram type for future use
         self.diagram_type_str = diagram_type_str

@@ -8,6 +8,8 @@ declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 import {dialog, ipcMain} from 'electron'
 import { Project } from './models/Project';
 const path = require('path');
+import chokidar from 'chokidar';
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();
@@ -21,6 +23,8 @@ const createWindow = (): void => {
     width: 800,
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      contextIsolation: true, // Recommended for security
+      nodeIntegration: false, // Recommended for security
     },
   });
   // and load the index.html of the app.
@@ -30,18 +34,41 @@ const createWindow = (): void => {
 
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
+
+  // Watch for file changes
+  const watcher = chokidar.watch([], {
+    persistent: true,
+    ignoreInitial: true, // Don't send events for files that already exist on startup
+    awaitWriteFinish: { // Helps with atomic writes
+      stabilityThreshold: 2000,
+      pollInterval: 100
+    }
+  });
+
+  
+
   mainWindow.webContents.session.webRequest.onHeadersReceived(
     {urls: ['*://*/*']},
     (details, callback) => {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
-          'Content-Security-Policy': ["default-src 'self'; connect-src 'self' http://localhost:5000; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' http://localhost:5000;"],
+          'Content-Security-Policy': ["default-src 'self'; connect-src 'self' http://localhost:5000 ws://localhost:5000; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' http://localhost:5000;"],
         }
       });
     }
   );
-  
+  watcher.on('change', (filePath) => {
+    mainWindow.webContents.send('file-changed', filePath);
+  });
+
+  ipcMain.handle('watch-file', (_, filePath) => {
+    watcher.add(filePath);
+  });
+
+  ipcMain.handle('unwatch-file', (_, filePath) => {
+    watcher.unwatch(filePath);
+  });
   ipcMain.handle('dialog:openDirectory', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory']
@@ -82,7 +109,6 @@ const createWindow = (): void => {
       const projectDir = project.directories.project || `${project.directories.base}/${project.name}_${project.id}`;
       // Change this from processed to output
       const outputDir = path.join(projectDir, 'output');
-      console.log('Looking for files in:', outputDir);
       const files = await fs.readdir(outputDir);
       const result = {
         markdown: files.filter(file => file.endsWith('.md')),
