@@ -19,7 +19,7 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir, setLoading }) => {
             const jsonData = JSON.parse(data);
             if (jsonData.diagramType === "UML Class Diagram") {
                 const classDiagram = ClassDiagram.fromJSON(jsonData);
-                setDiagram(<div className="p-4 w-full h-full"><ReactFlowProvider><ClassDiagramCanvas diagram={classDiagram} fileDir={fileDir}></ClassDiagramCanvas></ReactFlowProvider></div>);
+                setDiagram(<div className="pt-4 w-full h-full"><ReactFlowProvider><ClassDiagramCanvas diagram={classDiagram} fileDir={fileDir}></ClassDiagramCanvas></ReactFlowProvider></div>);
             }
             // handle other diagram types here
 
@@ -40,7 +40,6 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir, setLoading }) => {
         window.myAPI.watchFile(fileDir);
         const removeFileChangeListener = window.myAPI.onFileChange((changedFilePath: string) => {
             if (changedFilePath === fileDir) {
-                console.log(`Diagram file ${fileDir} changed, reloading.`);
                 loadDiagram();
             }
         });

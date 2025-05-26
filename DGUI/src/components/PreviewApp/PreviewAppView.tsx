@@ -17,7 +17,6 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ fileDir, setLoading }) 
             setError(null);
 
             try {
-                // First check if preview already exists
                 const response = await fetch(`http://localhost:5000/generate/preview`, {
                     method: 'GET',
                     headers: {
@@ -26,16 +25,11 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ fileDir, setLoading }) 
                 });
 
                 if (response.ok) {
-                    // Preview exists, use it
                     setPreviewUrl(`http://localhost:5000/generate/preview`);
                     if (setLoading) setLoading(false);
                     return;
                 }
 
-                // If preview doesn't exist, generate one
-                console.log("Preview app not found, generating a new one...");
-
-                // Make request to generate preview app
                 const generateResponse = await fetch('http://localhost:5000/generate/preview-app', {
                     method: 'POST',
                     headers: {
@@ -52,7 +46,6 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ fileDir, setLoading }) 
 
                 await new Promise(resolve => setTimeout(resolve, 500));
 
-                // Now try to load the preview again
                 setPreviewUrl(`http://localhost:5000/generate/preview`);
 
             } catch (err) {

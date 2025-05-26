@@ -41,34 +41,26 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
 
 
     useEffect(() => {
-        console.log('[ProjectContext] Current project changed:', currentProject);
         if (currentProject && currentProject.id) {
             const wsUrl = `${WS_BASE_URL}/ws/${currentProject.id}`;
-            console.log('[ProjectContext] Attempting to connect to WebSocket:', wsUrl);
             const ws = new WebSocket(wsUrl);
             webSocketRef.current = ws;
 
             ws.onopen = () => {
-                console.log('[ProjectContext] WebSocket connected for project:', currentProject.id);
             };
 
             ws.onmessage = (event) => {
                 try {
-                    const projectUpdateData = JSON.parse(event.data as string) as Project; // Assuming WS sends full Project-like data
-                    console.log('[ProjectContext] WebSocket message received:', projectUpdateData);
+                    const projectUpdateData = JSON.parse(event.data as string) as Project;
                     if (projectUpdateData && currentProject && projectUpdateData.id === currentProject.id) {
                         setCurrentProject(prevProject => {
                             // Ensure prevProject is not null before spreading
                             const newProjectState = { ...(prevProject || {}), ...projectUpdateData };
-                            console.log('[ProjectContext] Updating currentProject from WebSocket:', newProjectState);
                             return newProjectState as Project;
                         });
                     } else if (projectUpdateData && currentProject && projectUpdateData.id !== currentProject.id) {
-                        console.log("[ProjectContext] WebSocket update for a different project, ignoring for currentProject state:", projectUpdateData.id);
                         setProjects(prevProjects => prevProjects.map(p => p.id === projectUpdateData.id ? { ...p, ...projectUpdateData } : p));
                     } else if (projectUpdateData && !currentProject) {
-                        // This case is less likely if WS only connects for a currentProject
-                        console.log("[ProjectContext] WebSocket update received, but no current project. Updating projects list:", projectUpdateData.id);
                         setProjects(prevProjects => prevProjects.map(p => p.id === projectUpdateData.id ? { ...p, ...projectUpdateData } : p));
                     }
                 } catch (e) {
@@ -81,7 +73,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             };
 
             ws.onclose = (event) => {
-                console.log('[ProjectContext] WebSocket disconnected for project:', currentProject.id, 'Reason:', event.reason, 'Code:', event.code);
                 if (webSocketRef.current === ws) {
                     webSocketRef.current = null;
                 }
@@ -89,7 +80,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
 
             return () => {
                 if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-                    console.log('[ProjectContext] Closing WebSocket connection for project:', currentProject.id);
                     ws.close();
                 }
                 if (webSocketRef.current === ws) { // Defensive clear
@@ -98,7 +88,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             };
         } else {
             if (webSocketRef.current) {
-                console.log('[ProjectContext] No current project or project ID, closing existing WebSocket.');
                 webSocketRef.current.close();
                 webSocketRef.current = null;
             }
@@ -111,7 +100,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     };
 
     const fetchProjects = async (): Promise<void> => {
-        console.log('[ProjectContext] Fetching all projects...');
         setLoading(true);
         setError(null);
         try {
@@ -124,7 +112,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 throw new Error(`Failed to fetch projects: ${response.status}`);
             }
             const data = await response.json();
-            console.log('[ProjectContext] Fetched projects list:', data);
             setProjects(data || []);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to fetch projects';
@@ -137,7 +124,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     };
 
     const createProject = async (projectInput: { project_name: string, base_dir: string }): Promise<Project> => {
-        console.log('[ProjectContext] Attempting to create project:', projectInput);
         setLoading(true);
         setError(null);
         try {
@@ -147,7 +133,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 body: JSON.stringify(projectInput),
                 mode: 'cors',
             });
-            console.log(`[ProjectContext] Create API response status: ${response.status}`);
             if (!response.ok) {
                 let errorDetail = `Failed to create project: ${response.status}`;
                 try {
@@ -158,13 +143,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 throw new Error(errorDetail);
             }
 
-            // const createdProjectInfo = await response.json() as Project; // Backend returns ProjectInfo
-            // console.log('[ProjectContext] Create API success (initial info):', createdProjectInfo);
-            // Backend /create sets the project as current, so /details should fetch it.
-
-            console.log('[ProjectContext] Fetching details for newly created project...');
             const newProjectData = await getProjectDetails(); // This will call setCurrentProject
-            console.log('[ProjectContext] Successfully created and fetched details for project:', newProjectData);
 
             await fetchProjects(); // Refresh the list of all projects
             return newProjectData;
@@ -181,7 +160,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     };
 
     const loadProject = async (id: string): Promise<void> => {
-        console.log(`[ProjectContext] Attempting to load project with ID: ${id}`);
         setLoading(true);
         setError(null);
 
@@ -194,7 +172,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             });
             const projectData = await response.json();
             const loadedProject = projectData as Project;
-            console.log("loadedProject:", loadedProject);
             setCurrentProject(loadedProject);
 
         } catch (err) {
@@ -205,12 +182,10 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             throw err; // Re-throwing allows calling component to know about the error
         } finally {
             setLoading(false);
-            console.log(`[ProjectContext] loadProject for ID ${id} finished.`);
         }
     };
 
     const closeProject = async (): Promise<void> => {
-        console.log('[ProjectContext] Attempting to close current project...');
         setLoading(true);
         setError(null);
         try {
@@ -219,7 +194,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 headers: { 'Content-Type': 'application/json' },
                 mode: 'cors',
             });
-            console.log(`[ProjectContext] Close API response status: ${response.status}`);
             if (!response.ok) {
                 let errorDetail = `Failed to close project: ${response.status}`;
                 try {
@@ -228,7 +202,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 } catch (e) { /* ignore if error body cannot be parsed */ }
                 throw new Error(errorDetail);
             }
-            console.log('[ProjectContext] Close API success.');
             setCurrentProject(null); // This will trigger WebSocket cleanup in useEffect
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to close project';
@@ -244,7 +217,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     };
 
     const getProjectDetails = async (): Promise<Project> => {
-        console.log('[ProjectContext] Attempting to get project details...');
         setLoading(true);
         setError(null);
         try {
@@ -253,7 +225,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 headers: { 'Content-Type': 'application/json' },
                 mode: 'cors',
             });
-            console.log(`[ProjectContext] Get Details API response status: ${response.status}`);
             if (!response.ok) {
                 let errorDetail = `Failed to get project details: ${response.status}`;
                 try {
@@ -263,14 +234,12 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 throw new Error(errorDetail);
             }
             const projectDetails = await response.json() as Project; // Backend /details returns ProjectInfo
-            console.log('[ProjectContext] Get Details API success, data:', projectDetails);
 
             // If these details are for the project that is (or should be) current, update the state.
             // This is especially useful if getProjectDetails is called after createProject.
             if (projectDetails && projectDetails.id) {
                 // Check if it's a new project being set, or an update to the existing current one.
                 if (!currentProject || (currentProject && currentProject.id === projectDetails.id)) {
-                    console.log('[ProjectContext] Setting/Updating current project from getProjectDetails:', projectDetails);
                     setCurrentProject(projectDetails);
                 } else if (currentProject && currentProject.id !== projectDetails.id) {
                     // This case implies /details returned a project different from what frontend thought was current.
@@ -301,7 +270,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     };
 
     const createFile = async (fileName: string, fileType: DocumentType) => {
-        console.log('[ProjectContext] Attempting to create file:', fileName, 'of type:', fileType);
         setLoading(true);
         setError(null);
         try {
@@ -323,7 +291,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 body: JSON.stringify({ file_name: builtFileName }),
                 mode: 'cors',
             });
-            console.log(`[ProjectContext] Create File API response status: ${response.status}`);
             if (!response.ok) {
                 let errorDetail = `Failed to create file: ${response.status}`;
                 try {
@@ -334,7 +301,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 }
                 throw new Error(errorDetail);
             }
-            console.log('[ProjectContext] Create File API success.');
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to create file';
             setError(errorMessage);
@@ -346,7 +312,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     }
 
     const deleteFile = async (fileName: string, fileType: DocumentType) => {
-        console.log('[ProjectContext] Attempting to delete file:', fileName, 'of type:', fileType);
         setLoading(true);
         setError(null);
         try {
@@ -368,7 +333,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 body: JSON.stringify({ file_name: builtFileName }),
                 mode: 'cors',
             });
-            console.log(`[ProjectContext] Delete File API response status: ${response.status}`);
             if (!response.ok) {
                 let errorDetail = `Failed to delete file: ${response.status}`;
                 try {
@@ -379,7 +343,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 }
                 throw new Error(errorDetail);
             }
-            console.log('[ProjectContext] Delete File API success.');
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to delete file';
             setError(errorMessage);
@@ -391,7 +354,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     }
 
     const renameFile = async (oldFileName: string, newFileName: string, fileType: DocumentType) => {
-        console.log('[ProjectContext] Attempting to rename file:', oldFileName, 'to:', newFileName, 'of type:', fileType);
         setLoading(true);
         setError(null);
         try {
@@ -417,7 +379,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 body: JSON.stringify({ old_file_name: builtOldFileName, new_file_name: builtNewFileName }),
                 mode: 'cors',
             });
-            console.log(`[ProjectContext] Rename File API response status: ${response.status}`);
             if (!response.ok) {
                 let errorDetail = `Failed to rename file: ${response.status}`;
                 try {
@@ -428,7 +389,6 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 }
                 throw new Error(errorDetail);
             }
-            console.log('[ProjectContext] Rename File API success.');
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to rename file';
             setError(errorMessage);

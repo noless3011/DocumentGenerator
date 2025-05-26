@@ -1,14 +1,14 @@
-// Layout utilities for arranging diagram elements
+
 import { Node, Edge } from '@xyflow/react';
 import { Class } from '../models/ClassDiagram';
 
-// Constants for layout parameters
-const NODE_WIDTH = 200; // Can inform optimal distance, not directly used in point-mass physics
-const NODE_HEIGHT = 150; // Can inform optimal distance
-const HORIZONTAL_SPACING = 250; // Default for optimal distance or grid spacing
-const VERTICAL_SPACING = 200; // Default for grid spacing
 
-// Interface for layout options
+const NODE_WIDTH = 200; 
+const NODE_HEIGHT = 150; 
+const HORIZONTAL_SPACING = 250; 
+const VERTICAL_SPACING = 200; 
+
+
 export interface LayoutOptions {
   spacing?: number;
   direction?: 'horizontal' | 'vertical';
@@ -16,7 +16,7 @@ export interface LayoutOptions {
   centerY?: number;
 }
 
-// Interface for Force-Directed Layout specific options
+
 export interface ForceDirectedLayoutOptions extends LayoutOptions {
   /** Number of iterations for the simulation. Higher values lead to more stable layouts but take longer.
    * Default: 200 */
@@ -39,7 +39,7 @@ export interface ForceDirectedLayoutOptions extends LayoutOptions {
   /** Factor by which temperature decreases in each iteration (e.g., 0.97 means 3% cooling).
    * Default: 0.97 */
   coolingFactor?: number;
-  // minEnergyThreshold?: number; // Potential future addition: stop if system energy is low
+  
 }
 
 
@@ -51,8 +51,8 @@ export function gridLayout<T extends Record<string, unknown>>(
   options: LayoutOptions = {}
 ): Node<T>[] {
   const {
-    spacing = HORIZONTAL_SPACING, // Use HORIZONTAL_SPACING as a general default if not specified
-    direction = 'horizontal', // Direction doesn't strictly apply to grid like this but kept for interface
+    spacing = HORIZONTAL_SPACING, 
+    direction = 'horizontal', 
     centerX = 0,
     centerY = 0,
   } = options;
@@ -63,7 +63,7 @@ export function gridLayout<T extends Record<string, unknown>>(
     const row = Math.floor(index / cols);
     const col = index % cols;
     
-    // Adjust so centerX, centerY refers to the center of the grid
+    
     const gridWidth = (cols - 1) * spacing;
     const gridHeight = (Math.ceil(nodes.length / cols) - 1) * spacing;
     
@@ -88,12 +88,12 @@ export function circleLayout<T extends Record<string, unknown>>(
   options: LayoutOptions = {}
 ): Node<T>[] {
   const {
-    spacing = HORIZONTAL_SPACING, // Used to calculate radius
-    centerX = 0, // Default center X
-    centerY = 0, // Default center Y
+    spacing = HORIZONTAL_SPACING, 
+    centerX = 0, 
+    centerY = 0, 
   } = options;
   
-  // Ensure a minimum radius even for few nodes, and scale with node count
+  
   const radius = Math.max(spacing, (nodes.length * (NODE_WIDTH || spacing)) / (2 * Math.PI) * 0.5);
   
   return nodes.map((node, index) => {
@@ -132,15 +132,15 @@ export function forceDirectedLayout<T extends Record<string, unknown>>(
     centerY = 0,
   } = options;
 
-  // Initialize positions:
-  // - Use existing positions if provided.
-  // - If all nodes are at the same position (e.g., 0,0 or all undefined), spread them in a circle.
+  
+  
+  
   const currentPositions = new Map<string, { x: number; y: number }>();
   let allNodesAtSameInitialPosition = true;
   let firstNonNullPosition: { x: number; y: number } | null = null;
 
   nodes.forEach(node => {
-    const pos = node.position ? { ...node.position } : { x: centerX, y: centerY }; // Default to center if undefined
+    const pos = node.position ? { ...node.position } : { x: centerX, y: centerY }; 
     currentPositions.set(node.id, pos);
 
     if (firstNonNullPosition === null) {
@@ -160,7 +160,7 @@ export function forceDirectedLayout<T extends Record<string, unknown>>(
       });
     });
   } else if (nodes.length === 1 && allNodesAtSameInitialPosition) {
-     // Single node, ensure it's at centerX, centerY if it was at a default spot
+     
      currentPositions.set(nodes[0].id, { x: centerX, y: centerY });
   }
 
@@ -171,7 +171,7 @@ export function forceDirectedLayout<T extends Record<string, unknown>>(
     const displacements = new Map<string, { dx: number; dy: number }>();
     nodes.forEach(node => displacements.set(node.id, { dx: 0, dy: 0 }));
 
-    // 1. Calculate repulsive forces between all pairs of nodes
+    
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const nodeU = nodes[i];
@@ -183,11 +183,11 @@ export function forceDirectedLayout<T extends Record<string, unknown>>(
         const deltaY = posU.y - posV.y;
         let distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-        if (distance < 0.01) { // Avoid division by zero or extreme forces if coincident
-          distance = 0.1; // Jitter them apart slightly
+        if (distance < 0.01) { 
+          distance = 0.1; 
         }
         
-        // Repulsive force: F_r = k_r / distance
+        
         const repulsiveF = repulsionStrength / distance;
 
         const dispU = displacements.get(nodeU.id)!;
@@ -200,7 +200,7 @@ export function forceDirectedLayout<T extends Record<string, unknown>>(
       }
     }
 
-    // 2. Calculate attractive forces for edges (springs)
+    
     edges.forEach(edge => {
       const sourceNodeId = edge.source;
       const targetNodeId = edge.target;
@@ -213,28 +213,28 @@ export function forceDirectedLayout<T extends Record<string, unknown>>(
       const posSource = currentPositions.get(sourceNodeId)!;
       const posTarget = currentPositions.get(targetNodeId)!;
 
-      const deltaX = posSource.x - posTarget.x; // Vector from target to source
+      const deltaX = posSource.x - posTarget.x; 
       const deltaY = posSource.y - posTarget.y;
       const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-      if (distance < 0.01) return; // Nodes are effectively at the same spot
+      if (distance < 0.01) return; 
 
-      // Attractive force (spring): F_a = k_a * (distance - optimalDistance)
-      // Positive if too far (pulls), negative if too close (pushes via spring mechanism)
+      
+      
       const attractiveF = attractionStrength * (distance - optDist);
 
       const dispSource = displacements.get(sourceNodeId)!;
-      // Force on source is towards target: -delta direction scaled by attractiveF
+      
       dispSource.dx -= (deltaX / distance) * attractiveF;
       dispSource.dy -= (deltaY / distance) * attractiveF;
 
       const dispTarget = displacements.get(targetNodeId)!;
-      // Force on target is towards source: +delta direction scaled by attractiveF
+      
       dispTarget.dx += (deltaX / distance) * attractiveF;
       dispTarget.dy += (deltaY / distance) * attractiveF;
     });
 
-    // 3. Apply gravity towards center (optional, but good for stability)
+    
     if (gravityStrength > 0) {
       nodes.forEach(node => {
         const pos = currentPositions.get(node.id)!;
@@ -243,13 +243,13 @@ export function forceDirectedLayout<T extends Record<string, unknown>>(
         const deltaXToCenter = centerX - pos.x;
         const deltaYToCenter = centerY - pos.y;
         
-        // Simple gravity: pull towards center, proportional to distance & strength
+        
         disp.dx += deltaXToCenter * gravityStrength;
         disp.dy += deltaYToCenter * gravityStrength;
       });
     }
 
-    // 4. Update positions based on displacements, limited by temperature
+    
     nodes.forEach(node => {
       const pos = currentPositions.get(node.id)!;
       const disp = displacements.get(node.id)!;
@@ -257,7 +257,7 @@ export function forceDirectedLayout<T extends Record<string, unknown>>(
       const displacementMagnitude = Math.sqrt(disp.dx * disp.dx + disp.dy * disp.dy);
 
       if (displacementMagnitude > 0) {
-        // Limit total displacement by current temperature
+        
         const scale = Math.min(displacementMagnitude, currentTemperature) / displacementMagnitude;
         
         pos.x += disp.dx * scale;
@@ -265,14 +265,14 @@ export function forceDirectedLayout<T extends Record<string, unknown>>(
       }
     });
 
-    // 5. Cool down the temperature
+    
     currentTemperature *= coolingFactor;
-    if (currentTemperature < 0.01 && iter > iterations / 2) { // Optional early exit if system cooled down
-        // break; 
+    if (currentTemperature < 0.01 && iter > iterations / 2) { 
+        
     }
   }
 
-  // Create new node objects with updated positions
+  
   return nodes.map(node => ({
     ...node,
     position: currentPositions.get(node.id)!,
@@ -298,26 +298,26 @@ export function treeLayout<T extends Record<string, unknown>>(
     
     if (nodes.length === 0) return [];
 
-    // Build adjacency list representation of the graph
+    
     const graph: Record<string, string[]> = {};
     const inDegree: Record<string, number> = {};
     const nodeMap = new Map(nodes.map(node => [node.id, node]));
     
-    // Initialize
+    
     nodes.forEach((node) => {
       graph[node.id] = [];
       inDegree[node.id] = 0;
     });
     
-    // Build graph
+    
     edges.forEach((edge) => {
-      if (graph[edge.source] && nodeMap.has(edge.target)) { // Check if source and target exist
+      if (graph[edge.source] && nodeMap.has(edge.target)) { 
         graph[edge.source].push(edge.target);
         inDegree[edge.target] = (inDegree[edge.target] || 0) + 1;
       }
     });
     
-    // Find root nodes (nodes with no incoming edges)
+    
     let rootNodesIds: string[] = [];
     Object.entries(inDegree).forEach(([nodeId, degree]) => {
       if (degree === 0) {
@@ -325,8 +325,8 @@ export function treeLayout<T extends Record<string, unknown>>(
       }
     });
     
-    // If no root nodes found (e.g., a cycle or all nodes have parents),
-    // try to pick nodes with minimal in-degree or just the first one as a fallback.
+    
+    
     if (rootNodesIds.length === 0 && nodes.length > 0) {
       let minInDegree = Infinity;
       for (const nodeId in inDegree) {
@@ -339,13 +339,13 @@ export function treeLayout<T extends Record<string, unknown>>(
           }
         }
       }
-      // If still no roots (e.g. empty graph or disconnected nodes not in inDegree map properly)
+      
       if(rootNodesIds.length === 0 && nodes.length > 0) {
         rootNodesIds.push(nodes[0].id);
       }
     }
     
-    // Assign levels to nodes using BFS/DFS to handle multiple roots and DAGs
+    
     const levels: Record<string, number> = {};
     const visitedDuringLeveling = new Set<string>();
     const queue: { id: string; level: number }[] = rootNodesIds.map(id => ({ id, level: 0 }));
@@ -353,7 +353,7 @@ export function treeLayout<T extends Record<string, unknown>>(
     let head = 0;
     while(head < queue.length) {
       const { id, level } = queue[head++];
-      if (visitedDuringLeveling.has(id) && levels[id] <= level) { // Already visited via a shorter or equal path
+      if (visitedDuringLeveling.has(id) && levels[id] <= level) { 
           continue;
       }
       
@@ -361,32 +361,32 @@ export function treeLayout<T extends Record<string, unknown>>(
       levels[id] = level;
       
       (graph[id] || []).forEach(childId => {
-        // To prevent cycles from breaking the layout, only add if not already processed at a lower level
+        
         if (!visitedDuringLeveling.has(childId) || levels[childId] > level + 1) {
-             // Decrement in-degree for children to handle DAGs correctly with BFS
+             
             inDegree[childId] = (inDegree[childId] || 1) -1;
-            if(inDegree[childId] <= 0) { // Process node when all its parents are processed
+            if(inDegree[childId] <= 0) { 
                  queue.push({ id: childId, level: level + 1 });
             }
         }
       });
     }
 
-    // Ensure all nodes get a level, even if disconnected or part of cycles not reached
+    
     nodes.forEach(node => {
         if (levels[node.id] === undefined) {
-            levels[node.id] = 0; // Place unreached nodes at level 0 or maxLevel + 1
+            levels[node.id] = 0; 
         }
     });
 
-    // Count nodes at each level and assign positions within the level
+    
     const nodesAtLevel: Record<number, string[]> = {};
     Object.entries(levels).forEach(([nodeId, level]) => {
       if (!nodesAtLevel[level]) nodesAtLevel[level] = [];
       nodesAtLevel[level].push(nodeId);
     });
     
-    // Position the nodes
+    
     const finalNodes: Node<T>[] = [];
     let maxLevelWidth = 0;
     for (const level in nodesAtLevel) {
@@ -403,11 +403,11 @@ export function treeLayout<T extends Record<string, unknown>>(
 
       let x,y;
       if (direction === 'horizontal') {
-        x = centerX + nodeLevel * (spacing + (NODE_WIDTH || 50)); // Using spacing for level separation
+        x = centerX + nodeLevel * (spacing + (NODE_WIDTH || 50)); 
         y = centerY + nodeOffset;
-      } else { // Vertical
+      } else { 
         x = centerX + nodeOffset;
-        y = centerY + nodeLevel * (spacing + (NODE_HEIGHT || 50)); // Using spacing for level separation
+        y = centerY + nodeLevel * (spacing + (NODE_HEIGHT || 50)); 
       }
       
       finalNodes.push({
@@ -425,7 +425,7 @@ export function treeLayout<T extends Record<string, unknown>>(
 export function autoArrange<T extends Record<string, unknown>>(
   nodes: Node<{ class: Class } & T>[], 
   edges: Edge[],
-  options: LayoutOptions = {} // Generic options, specific layouts will use their defaults if not overridden
+  options: LayoutOptions = {} 
 ): Node<T>[] {
   if (nodes.length === 0) return [];
   
@@ -433,27 +433,27 @@ export function autoArrange<T extends Record<string, unknown>>(
     spacing: options.spacing ?? HORIZONTAL_SPACING,
     centerX: options.centerX ?? 100,
     centerY: options.centerY ?? 100,
-    ...options // Pass through any other relevant options
+    ...options 
   };
 
-  // For very small diagrams or diagrams with no edges, use grid layout
+  
   if (nodes.length <= 3 || edges.length === 0) {
     return gridLayout(nodes, baseLayoutOptions);
   }
   
-  // For diagrams with some hierarchy, tree layout is often good.
-  // A more sophisticated check could involve detecting cycles or graph density.
-  // For now, we'll default to treeLayout if not a tiny graph.
-  // Force-directed could be another option here if tree structure isn't dominant.
+  
+  
+  
+  
   return treeLayout(nodes, edges, {
     ...baseLayoutOptions,
-    direction: options.direction ?? 'vertical', // treeLayout specific default
+    direction: options.direction ?? 'vertical', 
   });
 
-  // Example of how forceDirectedLayout could be integrated:
-  // if (isCyclic(nodes, edges) || graphDensity(nodes,edges) > SOME_THRESHOLD) {
-  //   return forceDirectedLayout(nodes, edges, { ...baseLayoutOptions, ...options });
-  // } else {
-  //   return treeLayout(nodes, edges, { ...baseLayoutOptions, direction: options.direction ?? 'vertical' });
-  // }
+  
+  
+  
+  
+  
+  
 }

@@ -12,7 +12,7 @@ import {
 } from '@mui/material';
 
 interface AIProviderMenuProps {
-    // Add props as needed
+
 }
 
 const AIProviderMenu: React.FC<AIProviderMenuProps> = () => {

@@ -214,7 +214,7 @@ const WorkspaceView: React.FC = () => {
                         ))}
                     </div>
 
-                    <div className="flex-1 flex flex-col p-6 overflow-y-auto scroll-smooth scrollbar scrollbar-w-2 scrollbar-thumb-indigo-500/30 bg-white">
+                    <div className="flex-1 flex flex-col overflow-y-auto scroll-smooth scrollbar scrollbar-w-2 scrollbar-thumb-indigo-500/30 bg-white">
                         {activeTab ? (
                             tabs.find(tab => tab.id === activeTab)?.content
                         ) : tabs.length > 0 ? (

@@ -9,7 +9,7 @@ import {
     FitViewOptions,
     DefaultEdgeOptions,
     EdgeMouseHandler,
-    // useReactFlow, // Removed: No longer needed here
+
 } from '@xyflow/react';
 import ClassNode from './ClassDiagram/ClassNode';
 import ClassEdge from './ClassDiagram/ClassEdge';
@@ -42,12 +42,12 @@ interface ClassDiagramCanvasProps {
     fileDir?: string;
 }
 
-// This is the inner component that uses the context
+
 const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
     const canvas = useRef<HTMLDivElement>(null);
     const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
     const [arrangeMenu, setArrangeMenu] = useState<{ top: number; left: number } | null>(null);
-    // const { getNodes: getReactFlowNodes, fitView: rfFitView } = useReactFlow(); // Removed
+
 
     const {
         nodes,
@@ -59,15 +59,15 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
         flipEdgeDirection,
         deleteEdge,
         addClassNode,
-        saveDiagram, // This is the context's saveDiagram, which handles geometry
+        saveDiagram,
         setNodes,
-        // initialGeometryLoaded, // Removed: Provider handles initial geometry loading/creation
-        // saveNodeGeometriesIfNeeded // Removed: Provider handles initial geometry logic
+
+
     } = useDiagramContext();
 
-    // Removed useEffect for initial geometry saving as provider now handles this.
-    // The ClassDiagramProvider will attempt to load geometry or create an initial
-    // geometry file if one doesn't exist.
+
+
+
 
     const onEdgeContextMenu: EdgeMouseHandler = useCallback((event, edge) => {
         event.preventDefault();
@@ -105,17 +105,11 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
 
     const handleSave = useCallback(() => {
         if (fileDir) {
-            saveDiagram(fileDir) // This calls the context's saveDiagram
-                .then(() => {
-                    console.log('Diagram and geometry saved successfully via canvas save button.');
-                })
+            saveDiagram(fileDir)
                 .catch(err => {
                     console.error('Error saving diagram or geometry from canvas:', err);
                 });
         } else {
-            // Optionally, handle saving for new diagrams (e.g., prompt for file path)
-            // For now, we assume saveDiagram in provider might throw or handle missing fileDir.
-            // Or, the button could be disabled if fileDir is not available.
             console.warn('Save clicked, but no fileDir is specified. Diagram not saved.');
         }
     }, [fileDir, saveDiagram]);
@@ -131,9 +125,6 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
 
     const handleArrange = useCallback((layoutType: string, options: LayoutOptions = {}) => {
         let arrangedNodes;
-        // Ensure 'nodes' from context has the most current data, including dimensions if available
-        // For layout algorithms, current positions and sometimes dimensions are important.
-        // The 'nodes' from context should be up-to-date due to onNodesChange.
         switch (layoutType) {
             case 'auto':
                 arrangedNodes = autoArrange(nodes, edges, options);
@@ -232,11 +223,11 @@ const ClassDiagramCanvasInner = ({ fileDir }: { fileDir?: string }) => {
     );
 };
 
-// This is the wrapper component that provides the context
+
 const ClassDiagramCanvas: React.FC<ClassDiagramCanvasProps> = ({ diagram, fileDir }) => {
-    // Keying the provider by fileDir (or a unique ID for new diagrams) can help
-    // ensure a fresh provider state when the diagram source changes.
-    // The initialDiagram prop will also trigger updates if its reference changes.
+
+
+
     const providerKey = fileDir || diagram.diagramName || 'new-diagram';
     return (
         <ClassDiagramProvider key={providerKey} initialDiagram={diagram} fileDir={fileDir}>

@@ -11,14 +11,14 @@ export interface Tab {
     id: string;
     title: string;
     filePath: string;
-    content: ReactNode; // Changed from () => ReactNode
+    content: ReactNode;
 }
 
 interface WorkspaceContextValue {
     tabs: Tab[];
     activeTab: string | null;
     setActiveTab: (tabId: string | null) => void;
-    removeTab: (tabId: string) => void; // Changed from filePath: string
+    removeTab: (tabId: string) => void;
     addTab: (id: string, filePath: string, tabType: DocumentType) => void;
 }
 
@@ -29,7 +29,7 @@ interface WorkspaceProviderProps {
 }
 
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }) => {
-    // Initialize state for the workspace
+
     const [tabs, setTabs] = useState<Tab[]>([]);
     const [activeTab, setActiveTab] = useState<string | null>(null);
 
@@ -42,7 +42,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         removeTab: (tabId: string) => {
             setTabs((prevTabs) => {
                 const newTabs = prevTabs.filter((tab) => tab.id !== tabId);
-                // If the removed tab was the active one, update activeTab
+
                 if (activeTab === tabId) {
                     setActiveTab(newTabs.length > 0 ? newTabs[0].id : null);
                 }
@@ -50,21 +50,21 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
             });
         },
         addTab: (id: string, filePath: string, tabType: DocumentType) => {
-            // Check if tab already exists
+
             const existingTab = tabs.find(tab => tab.id === id);
             if (existingTab) {
-                setActiveTab(id); // If exists, just make it active
+                setActiveTab(id);
                 return;
             }
 
             const newTabDefinition: Tab = {
                 id: id,
-                title: filePath.split(/[\\/]/).pop() || filePath || 'Untitled', // Use regex for path separators
+                title: filePath.split(/[\\/]/).pop() || filePath || 'Untitled',
                 filePath,
-                content: <Tab label={filePath} filePath={filePath} type={tabType} />, // Store instance directly
+                content: <Tab label={filePath} filePath={filePath} type={tabType} />,
             };
             setTabs((prevTabs) => [...prevTabs, newTabDefinition]);
-            setActiveTab(id); // Make the new tab active
+            setActiveTab(id);
         },
 
     }

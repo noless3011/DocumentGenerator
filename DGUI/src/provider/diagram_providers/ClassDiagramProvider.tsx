@@ -176,7 +176,6 @@ export function ClassDiagramProvider({ children, initialDiagram, fileDir }: Clas
                     try {
                         const geometryJsonToSave = JSON.stringify(nodeGeometries, null, 2);
                         await window.myAPI.saveFile(geometryFilePath, geometryJsonToSave);
-                        console.log(`Initial geometry file created and saved: ${geometryFilePath}`);
                         setInitialGeometryLoaded(true);
                     } catch (saveError) {
                         console.error(`Error creating initial geometry file ${geometryFilePath}:`, saveError);
@@ -333,7 +332,6 @@ export function ClassDiagramProvider({ children, initialDiagram, fileDir }: Clas
 
         try {
             await window.myAPI.saveFile(fileDirToSaveTo, diagramJson);
-            console.log('Diagram file saved successfully', fileDirToSaveTo);
 
             const geometryFilePath = getGeometryFilePath(fileDirToSaveTo);
             if (!geometryFilePath) {
@@ -348,7 +346,6 @@ export function ClassDiagramProvider({ children, initialDiagram, fileDir }: Clas
                 }));
                 const geometryJsonToSave = JSON.stringify(nodeGeometries, null, 2);
                 await window.myAPI.saveFile(geometryFilePath, geometryJsonToSave);
-                console.log('Geometry file saved successfully!', geometryFilePath);
             }
             if (!initialGeometryLoaded) setInitialGeometryLoaded(true);
 

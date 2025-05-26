@@ -59,17 +59,14 @@ const createWindow = (): void => {
     }
   );
   watcher.on('change', (filePath) => {
-    console.log(`File ${filePath} has been changed`);
     mainWindow.webContents.send('file-changed', filePath);
   });
 
   ipcMain.handle('watch-file', (_, filePath) => {
-    console.log(`Watching file: ${filePath}`);
     watcher.add(filePath);
   });
 
   ipcMain.handle('unwatch-file', (_, filePath) => {
-    console.log(`Unwatching file: ${filePath}`);
     watcher.unwatch(filePath);
   });
   ipcMain.handle('dialog:openDirectory', async () => {
@@ -112,7 +109,6 @@ const createWindow = (): void => {
       const projectDir = project.directories.project || `${project.directories.base}/${project.name}_${project.id}`;
       // Change this from processed to output
       const outputDir = path.join(projectDir, 'output');
-      console.log('Looking for files in:', outputDir);
       const files = await fs.readdir(outputDir);
       const result = {
         markdown: files.filter(file => file.endsWith('.md')),

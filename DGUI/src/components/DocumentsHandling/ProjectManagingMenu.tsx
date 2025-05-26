@@ -81,7 +81,6 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
             }
 
             handleClose();
-            console.log('Project loaded:', currentProject);
         } catch (err) {
             console.error('Error loading project:', err);
         }

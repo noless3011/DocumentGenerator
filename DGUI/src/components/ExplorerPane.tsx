@@ -4,7 +4,7 @@ import ArticleIcon from '@mui/icons-material/Article';
 import ComputerIcon from '@mui/icons-material/Computer';
 import { useProjects } from '../provider/ProjectProvider';
 
-// Use the provided enum
+
 export enum DocumentType {
     DIAGRAM = 'diagram',
     MARKDOWN = 'markdown',
@@ -133,7 +133,7 @@ const ExplorerPane: React.FC<ExplorerPaneProps> = ({ onFileSelect }) => {
                 } else if (file.path.endsWith(".html")) {
                     type = DocumentType.PROTOTYPE;
                 } else {
-                    type = DocumentType.MARKDOWN; // fallback, or you can add UNKNOWN to enum
+                    type = DocumentType.MARKDOWN;
                 }
                 return {
                     id: file.path,
@@ -176,7 +176,7 @@ const ExplorerPane: React.FC<ExplorerPaneProps> = ({ onFileSelect }) => {
     const handleRename = async (doc: Document, newName: string) => {
         try {
             await renameFile(
-                doc.name.replace(/\.[^/.]+$/, ""), // old name without extension
+                doc.name.replace(/\.[^/.]+$/, ""),
                 newName,
                 doc.type
             );

@@ -61,7 +61,6 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({
         const removeFileChangeListener = window.myAPI.onFileChange(
             (changedFilePath: string) => {
                 if (changedFilePath === fileDir) {
-                    console.log(`Markdown file ${fileDir} changed, reloading.`);
                     loadMarkdown();
                 }
             }
@@ -78,7 +77,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({
     return (
         <Box
             className={`h-full markdown-view ${className}`}
-            sx={{ bgcolor: "transparent", color: "#fff", position: "relative", height: "100%" }}
+            sx={{ bgcolor: "white", color: "#fff", position: "relative", height: "100%" }}
         >
             <Tooltip title="Settings">
                 <Fab
@@ -107,7 +106,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({
                         zIndex: 20,
                         p: 2,
                         width: 300,
-                        bgcolor: "transparent",
+                        bgcolor: "white",
                         color: "#000"
                     }}
                 >

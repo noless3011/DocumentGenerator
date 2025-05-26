@@ -1,15 +1,35 @@
+import { useChat } from "../../provider/ChatProvider";
+import { useEffect } from "react";
 const ChatWindow = () => {
+    const { inputValue, setInputValue, sendMessage, messages } = useChat();
+
+    const handleTextAreaChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setInputValue(event.target.value);
+        event.target.style.height = 'auto';
+        event.target.style.height = `${Math.min(event.target.scrollHeight, 128)}px`;
+    };
+
+    useEffect(() => {
+        const chatContainer = document.querySelector('.overflow-y-scroll');
+        if (chatContainer) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    }, [messages]);
+
     return (<div className="overflow-y-scroll">
         <textarea
             title="chat"
             name="Chat"
             className="w-full px-3 py-2 overflow-y-scroll bg-white focus:border-none outline-none resize-none max-h-32"
             placeholder="Type your message here..."
+            value={inputValue}
             style={{ overflow: 'hidden' }}
-            onChange={(e) => {
-                e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
-
+            onChange={handleTextAreaChange}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
             }}
         />
     </div>)

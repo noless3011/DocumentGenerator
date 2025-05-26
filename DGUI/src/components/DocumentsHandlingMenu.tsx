@@ -117,7 +117,6 @@ const DocumentsHandlingMenu: React.FC<DocumentsHandlingProps> = () => {
 
             const formData = new FormData();
             formData.append('file', file);
-            console.log('Uploading file:', formData);
             const uploadResponse = await fetch('http://localhost:5000/files/upload-excel', {
                 method: 'POST',
                 body: formData,
@@ -391,7 +390,6 @@ const DocumentsHandlingMenu: React.FC<DocumentsHandlingProps> = () => {
             }
 
             const result = await response.json();
-            console.log("Generate Documents Result:", result);
 
             alert('Documents generated successfully! Check the output tab.');
             handleClose();

@@ -15,8 +15,6 @@ interface ProcessedFiles {
   html: string[]; // Added html
 }
 
-// Simple logging to verify preload is running
-console.log('Preload script is running');
 
 contextBridge.exposeInMainWorld('myAPI', {
   selectFolder: (): Promise<string> => ipcRenderer.invoke('dialog:openDirectory'),

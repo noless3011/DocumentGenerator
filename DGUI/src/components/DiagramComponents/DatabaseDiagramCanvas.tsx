@@ -129,10 +129,10 @@ const DatabaseDiagramCanvas = () => {
 
     const onEdgeContextMenu = useCallback<EdgeMouseHandler>(
         (event, edge) => {
-            event.preventDefault(); // Prevent native context menu
+            event.preventDefault();
             const reactFlowBounds = canvas.current.getBoundingClientRect();
 
-            // Calculate position relative to the React Flow container
+
             const top = event.clientY - reactFlowBounds.top;
             const left = event.clientX - reactFlowBounds.left;
             setMenu({
@@ -144,15 +144,15 @@ const DatabaseDiagramCanvas = () => {
         [setMenu]
     );
 
-    // Close menu on pane click
+
     const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
 
-    // Handler passed to the EdgeTypeMenu
+
     const handleSelectEdgeType = (edgeId: string, type: EdgeTypes) => {
         setEdges((eds) =>
             eds.map((edge) => {
                 if (edge.id === edgeId) {
-                    // Properly update the data.type property
+
                     return {
                         ...edge,
                         data: { ...(edge.data || {}), type: type }
@@ -201,7 +201,7 @@ const DatabaseDiagramCanvas = () => {
                         left={menu.left}
                         onSelectEdgeType={handleSelectEdgeType}
                         onDeleteEdge={handleDeleteEdge}
-                        onClick={(e) => e.stopPropagation()} // Prevent closing the menu when clicking inside it
+                        onClick={(e) => e.stopPropagation()}
                     />
                 )}
             </ReactFlow>

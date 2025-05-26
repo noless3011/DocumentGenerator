@@ -14,29 +14,29 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
     const [isMethodsExpanded, setIsMethodsExpanded] = useState(true);
     const [isExpanded, setIsExpanded] = useState(false);
 
-    // Update the context when local state changes
+
     useEffect(() => {
         updateClass(id, localClass);
     }, [id, localClass, updateClass]);
 
-    // Expand the node when selected
+
     useEffect(() => {
         if (!selected) {
             setIsExpanded(false);
         }
     }, [selected]);
 
-    // Handle class name change
+
     const handleClassNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setLocalClass(prev => ({ ...prev, name: e.target.value }));
     };
 
-    // Handle class type change
+
     const handleClassTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setLocalClass(prev => ({ ...prev, type: e.target.value }));
     };
 
-    // Handle attribute changes
+
     const handleAttributeChange = (index: number, field: keyof Attribute, value: string) => {
         setLocalClass(prev => {
             const newAttributes = [...prev.attributes];
@@ -45,7 +45,7 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
         });
     };
 
-    // Handle attribute addition
+
     const handleAddAttribute = () => {
         setLocalClass(prev => ({
             ...prev,
@@ -53,7 +53,7 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
         }));
     };
 
-    // Handle attribute deletion
+
     const handleDeleteAttribute = (index: number) => {
         setLocalClass(prev => {
             const newAttributes = [...prev.attributes];
@@ -62,7 +62,7 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
         });
     };
 
-    // Similar handlers for methods...
+
     const handleMethodChange = (index: number, field: keyof Omit<Method, 'parameters'>, value: string) => {
         setLocalClass(prev => {
             const newMethods = [...prev.methods];
@@ -117,23 +117,23 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
         });
     };
 
-    // Toggle expanded view
+
     const toggleExpanded = (e: React.MouseEvent) => {
-        e.stopPropagation(); // Prevent node selection when clicking the button
+        e.stopPropagation();
         setIsExpanded(!isExpanded);
     };
 
     const handleDeleteNode = (e: React.MouseEvent) => {
-        e.stopPropagation(); // Prevent node selection when clicking the button
-        // find relationships connected to this node
+        e.stopPropagation();
+
         const connectedEdges = edges.filter(edge => edge.source === id || edge.target === id);
-        // delete the relationships
+
         connectedEdges.forEach(edge => {
             deleteEdge(edge.id);
         });
         deleteClassNode(id);
     };
-    // Render compact view
+
     if (!isExpanded) {
         return (
             <div className="border border-gray-300 rounded bg-yellow-50 flex flex-col shadow-md overflow-hidden">
@@ -209,7 +209,7 @@ const ClassNode = ({ data, selected, id }: NodeProps<ClassNode>) => {
         );
     }
 
-    // Render full editable view
+
     return (
         <div className="border border-gray-300 rounded bg-yellow-50 flex flex-col h-full shadow-md overflow-hidden">
             <NodeResizer

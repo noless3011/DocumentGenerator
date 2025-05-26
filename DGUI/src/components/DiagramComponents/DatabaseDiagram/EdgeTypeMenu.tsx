@@ -2,7 +2,7 @@ import React, { CSSProperties, useCallback } from 'react';
 import { EdgeTypes } from './TableEdge';
 
 interface EdgeTypeMenuProps extends React.HTMLAttributes<HTMLDivElement> {
-    id: string; // Edge ID
+    id: string;
     top?: number;
     left?: number;
     right?: number;

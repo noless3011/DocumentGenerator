@@ -22,8 +22,8 @@ const Tab: React.FC<TabProps> = ({ label, filePath, type }) => {
     } else if (type === DocumentType.DIAGRAM) {
         viewContent = <DiagramView fileDir={`${filePath}`} setLoading={setLoading} />;
     } else if (type === DocumentType.PROTOTYPE) {
-        // Assuming PreviewAppView can also accept setLoading or handles its own loading state.
-        // If PreviewAppView doesn't use setLoading, this prop will be ignored by it.
+
+
         viewContent = <PreviewAppView setLoading={setLoading} />;
     } else {
         viewContent = (
@@ -35,7 +35,7 @@ const Tab: React.FC<TabProps> = ({ label, filePath, type }) => {
     }
 
     return (
-        <div className="w-full h-full relative"> {/* Ensure this container can position children absolutely */}
+        <div className="w-full h-full relative">
             {loading && (
                 <div style={{
                     position: 'absolute',
@@ -46,18 +46,18 @@ const Tab: React.FC<TabProps> = ({ label, filePath, type }) => {
                     display: 'flex',
                     justifyContent: 'center',
                     alignItems: 'center',
-                    backgroundColor: 'rgba(255, 255, 255, 0.7)', // Semi-transparent overlay
-                    zIndex: 10 // Ensure spinner is on top
+                    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                    zIndex: 10
                 }}>
                     <CircularProgress />
                 </div>
             )}
-            {/* The actual content view, hidden when loading to prevent interaction with stale content */}
             <div style={{
                 width: '100%',
                 height: '100%',
                 visibility: loading ? 'hidden' : 'visible'
             }}>
+
                 {viewContent}
             </div>
         </div>

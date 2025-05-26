@@ -7,9 +7,6 @@ from agents.IAgent import IAgent
 from utils.Project import Project
 from utils.ExcelFileHandler import ExcelFileHandler
 
-# --- Application State ---
-# Simple dictionary to hold shared state like the current project.
-# In a larger application, consider a more robust state management class.
 app_state: dict = {"current_project": None}
 
 # --- Dependency Functions ---
@@ -83,12 +80,8 @@ def get_current_project(state: Annotated[dict, Depends(get_app_state)]) -> Proje
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No active project. Please create or load a project first."
         )
-    # Optionally refresh project state if needed (e.g., rescan files)
-    # current_project.scan_and_update_files()
     return current_project
 
-# Dependency for routes that *don't* strictly require an active project
-# but might use it if available (e.g., list projects)
 def get_optional_current_project(state: Annotated[dict, Depends(get_app_state)]) -> Optional[Project]:
     """Retrieves the current project if one is active, otherwise returns None."""
     return state.get("current_project")

@@ -25,7 +25,7 @@ const TableNode = ({ data, selected, id }: NodeProps<TableNode>) => {
     const [columns, setColumns] = useState(data.table.columns);
 
     useEffect(() => {
-        // Update the node data in React Flow whenever the tableName or columns change
+
         setNodes((nds) =>
             nds.map((node) =>
                 node.id === id
