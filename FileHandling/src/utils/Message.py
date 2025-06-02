@@ -1,8 +1,6 @@
 import base64
-import os
 from pathlib import Path
-import litellm
-import pprint
+
 class Message:
     def __init__(self):
         # Maintain a list of messages (each message is a dict with "role" and "content")

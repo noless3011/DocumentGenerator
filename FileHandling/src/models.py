@@ -1,5 +1,4 @@
-# models.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Json
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -11,7 +10,25 @@ class ProjectCreateRequest(BaseModel):
     project_name: str = Field("Untitled Project", description="Name of the project")
     base_dir: str = Field(..., description="Base directory where project folder will be created")
 
-class ProjectInfo(BaseModel):
+class ProjectFileEntry(BaseModel):
+    path: str
+    name: str
+    added_date: str # ISO format string
+    modified_date: str # ISO format string
+    size: int # in bytes
+
+class ProjectFiles(BaseModel):
+    input: List[ProjectFileEntry] = []
+    processed: List[ProjectFileEntry] = []
+    output: List[ProjectFileEntry] = []
+
+class ProjectRequirementsInfo(BaseModel):
+    input_description: str = ""
+    output_description: str = ""
+    features: Dict[str, str] = {}
+    further_requirements: str = ""
+
+class ProjectInfo(BaseModel): # Used for /details, /load, /create responses
     name: str
     id: str
     created_date: datetime
@@ -19,19 +36,28 @@ class ProjectInfo(BaseModel):
     description: str
     tags: List[str]
     directories: Dict[str, str]
-    files: Dict[str, List[Dict[str, str]]] 
+    files: ProjectFiles # Changed from Dict[str, List[Dict[str,str]]]
     processing_history: List[Dict[str, Any]]
-class ProjectListItem(BaseModel):
+    requirements: ProjectRequirementsInfo # Added
+    tech_stack: str # Added
+    # Optional summary fields from context for quick overview
+    # generated_text_docs_summary: Optional[List[str]] = None
+    # generated_diagrams_summary: Optional[List[str]] = None
+    # has_prototype_code: Optional[bool] = None
+
+
+class ProjectListItem(BaseModel): # Used for /list response
     id: str
     name: str
     base_dir: str
-    created_date: str # Keep as string for simple list display
-    modified_date: str # Keep as string
+    project_dir_name: str # Added: actual name of the project folder
+    created_date: str
+    modified_date: str
 
-class FileProcessingInfo(BaseModel):
-    path: str
-    name: str
-    sheets: Dict[str, str]
+class FileProcessingInfo(BaseModel): # For sheet processing request
+    path: str # Relative or absolute path recognizable by server; prefer name for lookup
+    name: str # Filename, used to look up in project's input files
+    sheets: Dict[str, str] # sheet_name -> "ui" or "table"
 
 class SheetProcessingRequest(BaseModel):
     files: List[FileProcessingInfo] = Field(..., description="List of files to process with their sheet settings")
@@ -41,36 +67,55 @@ class FileUploadResponse(BaseModel):
     message: str
     project_id: str
     original_filename: str
-    file_path: str
+    file_path: str # Actual path where file was saved (can include unique suffix)
+    saved_filename: Optional[str] = None # The name it was saved as (if different from original)
 
-class SheetListResponse(BaseModel):
+
+class SheetListResponse(BaseModel): # For /get-sheets response
     status: str
     project_id: str
-    sheets: List[str]
+    sheets_per_file: Optional[Dict[str, List[str]]] = None # filename -> list of sheets
+    all_unique_sheets: List[str] # Flattened unique list of all sheets from all files
+    errors: Optional[Dict[str, str]] = None # filename -> error message, if any
 
-class ProcessingResultDetail(BaseModel):
-    status: str
+class ProcessingResultDetail(BaseModel): # Part of /process-excel response
+    status: str # "success" or "error"
+    type: Optional[str] = None # "table" or "ui", if successful
     output_path: Optional[str] = None
-    error: Optional[str] = None
+    message: Optional[str] = None # For errors or additional info
+    error: Optional[str] = None # Legacy, prefer message
 
-class ProcessingResultResponse(BaseModel):
-    status: str
+    # Make Pydantic tolerant of extra fields from ExcelFileHandler if any
+    class Config:
+        extra = 'ignore'
+
+
+class ProcessingResultResponse(BaseModel): # For /process-excel response
+    status: str # Overall status: "success" if all OK, "partial" if some errors, "error" if all failed
     project_id: str
-    results: Dict[str, Dict[str, ProcessingResultDetail]] # filename -> {sheetname: result}
+    results: Dict[str, Dict[str, ProcessingResultDetail]] # filename -> {sheetname_or_error_key: result_detail}
 
-class GenerationResponse(BaseModel):
-    status: str
-    message: str
-    name: str # Name of the generated file
-
-class TextGenerationResponse(BaseModel):
-    status: str
-    message: str
-    dir: str # Path to the generated file
-
+# Generic responses
 class SimpleStatusResponse(BaseModel):
     status: str
     message: Optional[str] = None
 
 class ErrorResponse(BaseModel):
-    error: str
+    detail: str # Changed from 'error' to match FastAPI's default for HTTPException
+
+# For Chat WebSocket messages (example structures, can be expanded)
+class WebSocketMessage(BaseModel):
+    type: str
+    payload: Any
+
+class ChatMessagePayload(BaseModel):
+    text: str
+
+class CommandMessagePayload(BaseModel):
+    name: str
+    params: Optional[Dict[str, Any]] = None
+
+class FileContentPayload(BaseModel):
+    filename: str
+    content: str
+    lang: Optional[str] = None # e.g., "markdown", "json", "html"

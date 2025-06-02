@@ -1,151 +1,176 @@
 import litellm
-import json
-import re # Import the regular expression module
-from typing import List, Dict, Any
-from utils.Message import Message
+from typing import Optional
 from utils.Context import Context
-from agents.IAgent import IAgent
 from utils.Project import Project
+from config import settings
 
-class TextDocumentAgent(IAgent):
-    def __init__(self, name: str, model: str, project: Project = None):
-        self.name = name
+
+class TextDocumentAgent:
+    """
+    Agent for generating and editing text documents (primarily Markdown).
+    """
+    
+    def __init__(self, model: str, project: Optional[Project] = None):
         self.model = model
-        self.message = Message()
-        
+        self.project = project
+        self.context = None
         if project:
-            self.update_context(project.context)
-
-    def _extract_markdown_content(self, response_content: str) -> tuple[str | None, str | None]:
-        # Use regex to find the markdown block, ignoring case and allowing for whitespace
-        match = re.search(r"```markdown\s*\n(.*?)\n```", response_content, re.DOTALL | re.IGNORECASE)
-        if match:
-            document_content = match.group(1).strip()
-            first_line = document_content.split('\n', 1)[0].strip()
-
-            document_name = ''.join(e for e in first_line if e.isalnum() or e.isspace())
-
-            if document_name:
-                return document_name, document_content
-        return None, None 
-    def _init_info(self, context: Context):
-        for key in context.requirements:
-            # if any value is empty, return None
-            if not context.requirements[key]:
-                print("Requirement key '%s' is empty. Skipping generation.", key)
-                return None
-        # Check if the CSV file is empty - Assuming csv_description holds content or path
-        if not context.csv_description:
-            print("CSV description is empty. Skipping generation.")
-            return None
-        program_features_str = ""
-        if context.requirements.features:
-            program_features_str = "\n".join([f"  + {feature_name}: {feature_desc}" for feature_name, feature_desc in context.requirements.features.items()] )
-
-        generated_text_doc_str = ""
-        if context.generated_text_doc:
-            generated_text_doc_str = "\n".join([f"  === {doc_name}:\n{doc_text}\n===" for doc_name, doc_text in context.generated_text_doc.items()]) # Added newline for clarity
-
-        init_text = f'''
-You are a document writer for a programming project, you are capable of writing a dynamic range of document. You will be provided with a the context of the program.
-You will generate a document in the markdown format. You have to put the document in the code block with the ```markdown``` tag. The first line inside the markdown block must be the title of the document (e.g., Software Requirements Specification).
-
-Please be extremely meticulous and detailed in your documentation. Consider all edge cases, implementation details, and ensure technical accuracy in every section. Be thorough and precise with your explanations. Provide comprehensive code examples where appropriate, and explain each component's purpose and functionality.
-
-Document the architecture thoroughly, including design patterns used, data flows, and component interactions. Include diagrams if possible (by describing them textually). Elaborate on performance considerations, security implications, and scalability aspects of the solution.
-
-When documenting APIs, include complete parameter descriptions, return values, error handling, and usage examples. For complex algorithms, explain the underlying principles, time/space complexity, and alternative approaches considered.
-
-Here is the infomation about the project:
-- Project Name: {context.project_name}
-- The image of the diagram is sent above, if dont see, keep it in mind that the image is not available.
-- The program input requirement: {context.requirements.input_description}
-- The program output requirement: {context.requirements.output_description}
-- The program features: {program_features_str}
-- Here is the tech stack of the program: {context.tech_stack}
-- The program further requirements: {context.requirements.further_requirements}
-- Here is the already generated text document. You must follow the document generated from before strictly to maintain the consistency of the program, do not violate this consistency that previous document. If this part dont have anything that mean this is the first text document generated. You will have to think thouroughly, planning so future document can depend on this document to generate further
-{generated_text_doc_str}
-
-Remember to validate your document against all requirements, ensure all technical details are accurate, and provide comprehensive coverage of all features and functionalities. Be systematic and leave no aspect undocumented. Your documentation should serve as a definitive reference that anticipates and answers all potential questions users might have about the system.
-Example of the output:
-- Your thinking process...
-```markdown
-Software Requirements Specification
-The content of the document.
-```
-        '''
-        return init_text # Return the generated text for further processing
-    def generate(self, context: Context) -> str | None:
-        """Generate a document using Gemini API with both image and CSV data."""
-        init_text = self._init_info(context)
-        if init_text is None:
-            print("Initialization failed. Skipping generation.")
-            return None
-        if context.diagram_image: # Check if list is not empty
-            for image in context.diagram_image:
-                # Add the image to the message
-                self.message.add_user_image_from_file(image)
-
+            self.update_context(project)
+    
+    def update_context(self, project: Project) -> None:
+        """Update the agent with the current project context."""
+        self.project = project
+        self.context = project.context if project else None
+    
+    def generate(self, project: Project, prompt: str) -> Optional[str]:
+        """
+        Generate a markdown document based on project context and prompt.
+        
+        Args:
+            project: The current project instance
+            prompt: Description of what document to generate
+            
+        Returns:
+            Generated markdown content or None if generation fails
+        """
         try:
+            # Ensure we have the latest project context
+            self.update_context(project)
+            
+            # Build context information
+            context_info = self._build_context_string()
+            
+            # Create the system message for document generation
+            system_message = f"""You are a technical documentation expert. Generate high-quality Markdown documents based on project data and requirements.
+
+Project Context:
+{context_info}
+
+Guidelines for document generation:
+- Use proper Markdown formatting with headers, lists, tables, and code blocks
+- Start with a clear title using # header
+- Include relevant sections based on the project context
+- Use the project data and requirements to create meaningful content
+- Ensure the document is well-structured and professional
+- Include technical details when appropriate
+- Use tables for structured data representation
+- Add code examples if relevant to the tech stack
+
+Generate a comprehensive document that addresses the user's request while incorporating the project context."""
+
+            messages = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": f"Generate a document: {prompt}"}
+            ]
+            
+            # Use litellm to call the AI model
             response = litellm.completion(
                 model=self.model,
-                messages=self.message.get_conversation()
+                messages=messages,
+                api_key=settings.GEMINI_API_KEY
             )
-            response_content = response.choices[0].message.content
-            self.message.append_llm_response(response_content)
-
-            # Extract the content and name using the new method
-            document_name, document_content = self._extract_markdown_content(response_content)
-
-            if document_content and document_name:
-                return document_content
-            else:
-                print("Could not extract markdown content from LLM response.")
-                return None # Indicate failure if extraction fails
-
+            
+            return response.choices[0].message.content
+            
         except Exception as e:
-            print(f"Error during litellm completion or processing: {e}")
-            return None # Return None on API error or other exceptions
-
-
-    def update_context(self, context: Context) -> None:
-        new_init_message = self._init_info(context)
-        # Replace the initial system message with the updated context
-        self.message.replace_init_message(new_init_message)
-
-
-    def edit(self, prompt:str, attached_context: str, context:Context) -> str | None: # Added attached_context type hint and return type hint
-        """Edit a document using the provided message and context."""
-        if len(self.message.messages) == 0:
-            print("Cannot edit: No previous conversation history.")
+            print(f"Error in TextDocumentAgent.generate: {e}")
             return None
-        for key in context.requirements:
-            if not context.requirements[key]:
-                print("Requirement key '%s' is empty during edit. Context might be incomplete.", key)
-
-        if not context.csv_description:
-            print("CSV description is empty during edit. Context might be incomplete.")
-
-        self.update_context(context) 
-        self.message.add_user_text(f"You must rewrite the *entire document* based on the previous response, following my instructions precisely. Remember to keep the ```markdown``` format with the title on the first line.\n\nMy instructions: {prompt}")
-
+    
+    def edit(self, instructions: str, current_content: str, project: Project) -> Optional[str]:
+        """
+        Edit existing document content based on instructions.
+        
+        Args:
+            instructions: What changes to make
+            current_content: The current document content
+            project: The current project instance
+            
+        Returns:
+            Updated document content or None if editing fails
+        """
         try:
+            # Ensure we have the latest project context
+            self.update_context(project)
+            
+            # Build context information
+            context_info = self._build_context_string()
+            
+            # Create the system message for document editing
+            system_message = f"""You are a technical documentation editor. Edit and improve Markdown documents based on specific instructions.
+
+Project Context:
+{context_info}
+
+Guidelines for document editing:
+- Maintain the existing Markdown formatting style
+- Follow the provided instructions precisely
+- Preserve the document structure unless instructed otherwise
+- Ensure consistency in formatting and style
+- Keep the document professional and well-organized
+- Use project context to enhance content when relevant
+- Return the complete edited document, not just the changes"""
+
+            messages = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": f"""Please edit the following document according to these instructions:
+
+Instructions: {instructions}
+
+Current Document Content:
+{current_content}
+
+Please provide the complete edited document."""}
+            ]
+            
+            # Use litellm to call the AI model
             response = litellm.completion(
                 model=self.model,
-                messages=self.message.get_conversation()
+                messages=messages,
+                api_key=settings.GEMINI_API_KEY
             )
-            response_content = response.choices[0].message.content
-            self.message.append_llm_response(response_content)
-
-            document_name, document_content = self._extract_markdown_content(response_content)
-
-            if document_content and document_name:
-                return document_content
-            else:
-                print("Could not extract markdown content from LLM response during edit.")
-                return None
-
+            
+            return response.choices[0].message.content
+            
         except Exception as e:
-            print(f"Error during litellm completion or processing in edit: {e}")
-            return None 
+            print(f"Error in TextDocumentAgent.edit: {e}")
+            return None
+    
+    def _build_context_string(self) -> str:
+        """Build a context string from the current project."""
+        if not self.context:
+            return "No project context available."
+        
+        context_parts = [
+            f"Project Name: {self.context.project_name}",
+            f"Tech Stack: {self.context.tech_stack or 'Not specified'}"
+        ]
+        
+        # Add requirements info
+        if self.context.requirements:
+            req = self.context.requirements
+            if req.input_description:
+                context_parts.append(f"Input Description: {req.input_description}")
+            if req.output_description:
+                context_parts.append(f"Output Description: {req.output_description}")
+            if req.features:
+                features_str = ", ".join([f"{k}: {v}" for k, v in req.features.items()])
+                context_parts.append(f"Features: {features_str}")
+            if req.further_requirements:
+                context_parts.append(f"Additional Requirements: {req.further_requirements}")
+        
+        # Add CSV data for content generation
+        if self.context.csv_description:
+            context_parts.append(f"Available Data: {len(self.context.csv_description)} CSV files processed")
+            # Include CSV data for document generation
+            for i, csv_data in enumerate(self.context.csv_description):
+                if csv_data:
+                    preview = csv_data[:1000]  # Larger preview for document generation
+                    if len(csv_data) > 1000:
+                        preview += "..."
+                    context_parts.append(f"CSV Data {i+1}:\n{preview}")
+        
+        # Add generated content info
+        if self.context.generated_text_doc:
+            context_parts.append(f"Previously Generated Documents: {list(self.context.generated_text_doc.keys())}")
+        
+        return "\n".join(context_parts)

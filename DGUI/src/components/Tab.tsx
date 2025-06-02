@@ -22,8 +22,6 @@ const Tab: React.FC<TabProps> = ({ label, filePath, type }) => {
     } else if (type === DocumentType.DIAGRAM) {
         viewContent = <DiagramView fileDir={`${filePath}`} setLoading={setLoading} />;
     } else if (type === DocumentType.PROTOTYPE) {
-
-
         viewContent = <PreviewAppView setLoading={setLoading} />;
     } else {
         viewContent = (

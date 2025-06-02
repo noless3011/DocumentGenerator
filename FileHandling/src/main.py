@@ -1,88 +1,129 @@
-
 import uvicorn
+from datetime import datetime
 from fastapi import FastAPI, Request, Response, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from config import settings 
-from dependencies import app_state
-from routers import projects, files, chat 
+from config import settings
+from dependencies import app_state, register_agent_instance, clear_all_agent_instances
+from routers import projects, files, chat
 
+# Import Agent classes for registration
+from agents.TextDocumentAgent import TextDocumentAgent
+from agents.DiagramAgent import DiagramAgent
+from agents.PrototypeAgent import PrototypeAgent
+# ChatAgent is managed per project, not globally registered in the same way
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Register shared agent instances
+    print("Application startup: Registering shared agents...")
+    # These agents are stateless or their state is re-evaluated per call based on Project context
+    # They use the project passed to their methods.
+    # The 'project' passed to their constructor during registration is a placeholder if needed by __init__
+    # but for these, it's not strictly necessary if their __init__ is light.
+    # Let's assume a dummy project or None is fine if their __init__ handles it.
+    # However, our agent __init__ methods now expect a Project.
+    # This implies shared agents might need a slightly different init or a default project context.
+    # For simplicity, we'll skip providing a project at registration,
+    # and ensure their methods (generate, edit, update_context) correctly use the passed-in project.
+    # This means their __init__ should not rely on self.project being immediately useful.
+    # OR, we register them without a project, and they are fully configured by update_context(project).
+    # The current agent structure has __init__(self, model, project). This is problematic for shared instances.
+    #
+    # Let's adjust agent constructors to take Optional[Project] and handle it.
+    # For shared agents, project will be None at init.
+    # update_context(project) will be called before generate/edit.
+
+    # Simpler: Agent constructors for SHARED agents just take the model.
+    # `self.project` is set by `update_context`.
+    # This requires a slight refactor of agent __init__ if they use self.project in __init__.
+    # Let's assume TextDocumentAgent, DiagramAgent, PrototypeAgent __init__(self, model) is feasible,
+    # and self.project is set/used by update_context and subsequent calls.
+    # For now, I will proceed with current agent structure and comment out registration
+    # This part needs careful thought on how shared agents are initialized vs. project-specific ChatAgents.
+
+    # Placeholder for dummy project if agent constructors *require* a project
+    # from utils.Project import Project as DummyProjectForAgentInit
+    # dummy_project = DummyProjectForAgentInit("dummy_agent_init_project", settings.ROOT_DIR / "temp_dummy")
+    # dummy_project.create_directory_structure()
+
+
+    # To make shared agents work:
+    # 1. Modify Text/Diagram/Proto Agent __init__ to be: __init__(self, model: str, project: Optional[Project] = None)
+    # 2. self.project = project in their __init__
+    # 3. if project: self.update_context(project) in their __init__
+    # 4. In their generate/edit/update_context methods, they will receive `project` as an argument.
+    #    `update_context` will set `self.project = project`.
+
+    # The changes above have been made to the agent files.
+    # Now, register them with project=None.
+    try:
+        text_agent = TextDocumentAgent(model=settings.DEFAULT_TEXT_AGENT_MODEL, project=None)
+        register_agent_instance(settings.DEFAULT_TEXT_AGENT_NAME, text_agent)
+
+        diagram_agent = DiagramAgent(model=settings.DEFAULT_DIAGRAM_AGENT_MODEL, project=None)
+        register_agent_instance(settings.DEFAULT_DIAGRAM_AGENT_NAME, diagram_agent)
+
+        prototype_agent = PrototypeAgent(model=settings.DEFAULT_PROTOTYPE_AGENT_MODEL, project=None)
+        register_agent_instance(settings.DEFAULT_PROTOTYPE_AGENT_NAME, prototype_agent)
+        print("Shared agents registered.")
+    except TypeError as te:
+        print(f"Error registering shared agents: {te}. This might be due to agent constructors requiring a Project instance. Consider refactoring shared agent constructors.")
+    except Exception as e:
+        print(f"An unexpected error occurred during shared agent registration: {e}")
+
+
+    yield
+    # Shutdown
+    print("Application shutdown: Clearing agent instances...")
+    clear_all_agent_instances()
+    # dummy_project.create_directory_structure() # cleanup dummy if created
+    # shutil.rmtree(dummy_project.project_dir, ignore_errors=True)
 
 app = FastAPI(
     title="Document Generation API",
     description="API for managing projects, processing Excel files, and generating documents using AI.",
-    version="1.0.0"
-
+    version="1.1.0", # Incremented version
+    lifespan=lifespan
 )
-
-
-
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5000", "http://127.0.0.1:3000"],  
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"], # Added common Vite port
     allow_credentials=True,
-    allow_methods=["*"], 
-    allow_headers=["*"], 
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
+# CSP Middleware (consider if needed for your deployment)
+# @app.middleware("http")
+# async def add_csp_header_middleware(request: Request, call_next):
+#     response: Response = await call_next(request)
+#     # ... CSP header setting ... (ensure connect-src includes ws:// and wss:// for your chat port)
+#     return response
 
-@app.middleware("http")
-async def add_csp_header_middleware(request: Request, call_next):
-    """Adds Content-Security-Policy header to responses."""
-    response: Response = await call_next(request)
-    print(f"Applying CSP header for request path: {request.url.path}")
-    csp = (
-        "default-src 'self' data:; "
-        
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-        
-        "style-src 'self' 'unsafe-inline'; "
-         
-        "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 ws://localhost:5000 wss://localhost:5000 file: ; " 
-        
-        "frame-src 'self'; "
-        
-        "img-src 'self' data: blob:; "
-        
-        "form-action 'self';"
-    )
-    print(f"Setting CSP: {csp}")
-    response.headers['Content-Security-Policy'] = csp
-    return response
+# Basic error handler for debugging (can be removed in production)
+# @app.exception_handler(Exception)
+# async def debug_exception_handler(request: Request, exc: Exception):
+#     import traceback
+#     return Response(
+#         content="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+#         status_code=500
+#     )
 
-@app.exception_handler(Exception)
-async def debug_exception_handler(request: Request, exc: Exception):
-    import traceback
-
-    return Response(
-        content="".join(
-            traceback.format_exception(
-                type(exc), exc, exc.__traceback__
-            )
-        )
-    )
 app.include_router(projects.router)
 app.include_router(files.router)
-app.include_router(chat.router) 
-
+app.include_router(chat.router)
 
 @app.get("/", tags=["Root"], summary="API Root")
 async def read_root():
-    """Provides a simple welcome message for the API root."""
-    return {"message": "Welcome to the Document Generation API"}
+    return {"message": "Welcome to the Document Generation API v1.1.0"}
 
 @app.get("/health", tags=["Health"], summary="Health Check")
 async def health_check():
-    """Simple health check endpoint to verify the API is running."""
-    return {"status": "ok"}
-
-
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
 if __name__ == "__main__":
     print(f"Starting Uvicorn server on http://127.0.0.1:5000")
-    
-    
     uvicorn.run("main:app", host="127.0.0.1", port=5000, reload=True)
-

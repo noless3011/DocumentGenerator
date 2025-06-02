@@ -1,9 +1,8 @@
-# routers/files.py
 import os
 import shutil
-from typing import Annotated, Dict, List
+from typing import Annotated, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Body, status
-from werkzeug.utils import secure_filename # Still useful for sanitizing filenames
+from werkzeug.utils import secure_filename
 from pathlib import Path
 
 from config import settings
@@ -11,9 +10,10 @@ from utils.Project import Project
 from utils.ExcelFileHandler import ExcelFileHandler
 from models import (
     FileUploadResponse, SheetListResponse, SheetProcessingRequest,
-    ProcessingResultResponse, ErrorResponse, ProcessingResultDetail
+    ProcessingResultResponse, ErrorResponse, ProcessingResultDetail,
+    FileProcessingInfo # Added this import
 )
-from dependencies import get_current_project, get_excel_handler, get_agent_instance
+from dependencies import get_current_project, get_excel_handler
 
 router = APIRouter(
     prefix="/files",
@@ -21,7 +21,6 @@ router = APIRouter(
     responses={404: {"description": "Not found", "model": ErrorResponse}},
 )
 
-# Helper function (can be moved to utils if used elsewhere)
 def allowed_file(filename: str):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in settings.ALLOWED_UPLOAD_EXTENSIONS
 
@@ -30,7 +29,6 @@ async def upload_excel(
     current_project: Annotated[Project, Depends(get_current_project)],
     file: UploadFile = File(...)
 ):
-    """Uploads an Excel file (.xlsx, .xls) to the current project's input directory."""
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file selected")
 
@@ -40,207 +38,200 @@ async def upload_excel(
             detail=f"Invalid file type for '{file.filename}'. Allowed types are: {', '.join(settings.ALLOWED_UPLOAD_EXTENSIONS)}"
         )
 
-    original_filename = secure_filename(file.filename) # Sanitize
-    
-    input_dir_path = Path(current_project.input_dir)
-    input_dir_path.mkdir(parents=True, exist_ok=True)
-    destination_path_str = str(input_dir_path / original_filename)
+    original_filename = secure_filename(file.filename)
 
-    created_successfully = await current_project.create_file(original_filename, "input")
-    if not created_successfully:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create and record file '{original_filename}' in project."
-        )
+    input_dir_path = Path(current_project.input_dir)
+    input_dir_path.mkdir(parents=True, exist_ok=True) # Ensure input dir exists
+
+    # Use Project's method to create and track the file record
+    # This handles unique naming if needed and adds to project.files
+    # We need to save content after creating the record.
+    # Let's adjust to save first, then add record.
+
+    # Determine unique file path
+    temp_filename = original_filename
+    destination_path = input_dir_path / temp_filename
+    counter = 1
+    while destination_path.exists():
+        name, ext = os.path.splitext(original_filename)
+        temp_filename = f"{name}_{counter}{ext}"
+        destination_path = input_dir_path / temp_filename
+        counter += 1
+
+    final_filename = temp_filename # This is the name it will be saved as
 
     try:
-        with open(destination_path_str, "wb") as buffer:
+        with open(destination_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
+        # If save fails, attempt to clean up if file was partially created (though unlikely with wb)
+        if destination_path.exists():
+            try:
+                os.remove(destination_path)
+            except OSError:
+                pass # Ignore error during cleanup
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not save file content: {e}")
     finally:
         await file.close()
-    await current_project.save_metadata()
+
+    # Now that file is saved, add it to project records
+    added_successfully = await current_project.add_file_record(str(destination_path), "input", final_filename)
+    if not added_successfully:
+         # This case should ideally not happen if file saving succeeded.
+         # Might indicate logic error in add_file_record or race condition.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"File '{final_filename}' saved but failed to record in project."
+        )
+
+    await current_project.save_metadata() # Persist changes to project files list
 
     return FileUploadResponse(
         status="success",
         message="File uploaded successfully",
         project_id=current_project.id,
-        original_filename=original_filename,
-        file_path=destination_path_str # Return the actual saved path
+        original_filename=original_filename, # User's original filename
+        file_path=str(destination_path),    # Actual saved path (potentially renamed)
+        saved_filename=final_filename       # Actual saved name
     )
 
-@router.post("/get-sheets", response_model=SheetListResponse, summary="Get sheet names from Excel files")
+
+@router.post("/get-sheets", response_model=SheetListResponse, summary="Get sheet names from Excel files in input")
 async def get_sheets(
     current_project: Annotated[Project, Depends(get_current_project)],
     excel_handler: Annotated[ExcelFileHandler, Depends(get_excel_handler)]
 ):
-    """Retrieves a list of all sheet names from all Excel files in the project's input directory."""
-    current_project.scan_and_update_files() # Ensure file list is current
+    # No need to call scan_and_update_files() here if we trust project state,
+    # or call it if there's a chance files were added externally without API.
+    # For robustness:
+    await current_project.scan_and_update_files()
+
     excel_files_data = current_project.files.get("input", [])
 
-    if not any(allowed_file(f['name']) for f in excel_files_data):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No Excel files found in project's input directory")
+    # Filter for actual Excel files based on extension, not just any file in input_dir
+    project_excel_files = [f for f in excel_files_data if allowed_file(f['name'])]
 
-    all_sheet_names: List[str] = []
+    if not project_excel_files:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No Excel files (.xlsx, .xls) found in project's input directory.")
+
+    all_sheet_names_map: Dict[str, List[str]] = {} # filename -> list of sheets
     errors: Dict[str, str] = {}
 
-    for file_data in excel_files_data:
+    for file_data in project_excel_files:
         file_path = file_data['path']
         file_name = file_data['name']
-        if not allowed_file(file_name):
-            continue # Skip non-excel files
 
         try:
             sheets_or_error = excel_handler.get_sheet_names(file_path)
             if isinstance(sheets_or_error, list):
-                all_sheet_names.extend(sheets_or_error)
+                all_sheet_names_map[file_name] = sheets_or_error
             elif isinstance(sheets_or_error, dict) and "error" in sheets_or_error:
                  errors[file_name] = sheets_or_error["error"]
             else:
-                 # Should not happen based on ExcelFileHandler logic, but handle defensively
-                 errors[file_name] = "Unexpected return type from get_sheet_names"
-
+                 errors[file_name] = "Unexpected return from get_sheet_names"
         except Exception as e:
-            errors[file_name] = f"Failed to process file: {e}"
+            errors[file_name] = f"Failed to process file: {str(e)}"
 
-    # Decide on response based on errors
-    if errors and not all_sheet_names:
-        # Only errors occurred
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"message": "Errors occurred while reading sheets", "errors": errors})
-    elif errors:
-         # Partial success - return sheets found but maybe log errors?
-         # Or adjust response model to include warnings/errors.
-         print(f"Warnings during get_sheets for project {current_project.id}: {errors}")
+    if errors and not all_sheet_names_map:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"message": "Errors occurred while reading sheets from all Excel files", "errors": errors})
 
+    # Flatten list of all sheets for unique sorted list, but also provide per-file
+    all_sheets_flat = []
+    for sheets in all_sheet_names_map.values():
+        all_sheets_flat.extend(sheets)
 
-    # Remove duplicates and sort for consistency
-    unique_sorted_sheets = sorted(list(set(all_sheet_names)))
+    unique_sorted_sheets = sorted(list(set(all_sheets_flat)))
 
     return SheetListResponse(
         status="success",
         project_id=current_project.id,
-        sheets=unique_sorted_sheets
+        sheets_per_file=all_sheet_names_map, # New field
+        all_unique_sheets=unique_sorted_sheets, # Old field, now `all_unique_sheets`
+        errors=errors if errors else None # Include errors if any
     )
 
-@router.post("/preview-sheet", summary="Preview a sheet from an Excel file")
-async def preview_sheet(
-    current_project: Annotated[Project, Depends(get_current_project)],
-    excel_handler: Annotated[ExcelFileHandler, Depends(get_excel_handler)],
-    request_data: dict = Body(...)
-):
-    """Returns preview data for a specific sheet in an Excel file"""
-    file_path = request_data.get("filePath")
-    sheet_name = request_data.get("sheetName")
-    
-    if not file_path or not sheet_name:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, 
-                          detail="Both filePath and sheetName are required")
-    
-    try:
-        # Get the sheet data (first 20 rows for preview)
-        data = excel_handler.get_sheet_preview(file_path, sheet_name, max_rows=20)
-        
-        if not data or len(data) == 0:
-            return {"headers": [], "data": []}
-        
-        headers = data[0] if data else []
-        rows = data[1:] if len(data) > 1 else []
-        
-        return {"headers": headers, "data": rows}
-        
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                          detail=f"Failed to preview sheet: {str(e)}")
 
 @router.post("/process-excel", response_model=ProcessingResultResponse, summary="Process Excel sheets to CSV/Image")
 async def process_excel(
     current_project: Annotated[Project, Depends(get_current_project)],
     excel_handler: Annotated[ExcelFileHandler, Depends(get_excel_handler)],
-    request_data: SheetProcessingRequest 
+    request_data: SheetProcessingRequest
 ):
-    """
-    Processes specified sheets from selected Excel files,
-    saving them as CSV or images in the processed directory based on the request.
-    """
-    await current_project.scan_and_update_files() # Ensure file list is current
-    output_dir = Path(current_project.processed_dir)
-    output_dir.mkdir(parents=True, exist_ok=True) # Ensure output dir exists
-    
-    if not request_data.files:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, 
-                          detail="No files provided for processing")
-    
-    results_for_response: Dict[str, Dict[str, ProcessingResultDetail]] = {}
-    has_error = False
-    processed_output_files = [] # Track files actually created
-    
-    # Process each file specified in the request
-    for file_info in request_data.files:
-        file_path = file_info.path
-        file_name = file_info.name
-        sheet_types = file_info.sheets
-        
-        if not os.path.exists(file_path) or not allowed_file(file_name):
-            results_for_response[file_name] = {
-                "file_error": ProcessingResultDetail(
-                    status="error", 
-                    error=f"File not found or invalid file type: {file_name}"
-                )
+    await current_project.scan_and_update_files()
+    processed_dir_path = Path(current_project.processed_dir)
+    processed_dir_path.mkdir(parents=True, exist_ok=True)
+
+    if not request_data.files: # request_data.files is List[FileProcessingInfo]
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files specified for processing.")
+
+    results_for_response: Dict[str, Dict[str, ProcessingResultDetail]] = {} # filename -> {sheetname: result}
+    any_error_occurred = False
+    successfully_processed_outputs_for_record = [] # For Project.add_processing_record
+
+    # Verify requested files exist in project's input
+    input_file_paths_from_project = {f['name']: f['path'] for f in current_project.files.get("input", [])}
+
+    for file_to_process_info in request_data.files: # file_to_process_info is FileProcessingInfo
+        requested_file_name = file_to_process_info.name
+
+        if requested_file_name not in input_file_paths_from_project:
+            results_for_response[requested_file_name] = {
+                "file_level_error": ProcessingResultDetail(status="error", error=f"File '{requested_file_name}' not found in project's input directory.")
             }
-            has_error = True
+            any_error_occurred = True
             continue
-        
+
+        actual_file_path = input_file_paths_from_project[requested_file_name]
+        sheet_types_to_process = file_to_process_info.sheets # Dict[sheet_name, "ui" or "table"]
+
         try:
-            # process_sheets returns Dict[sheet_name, Dict[status, output_path/error]]
-            process_result: Dict[str, Dict] = excel_handler.process_sheets(
-                file_path,
-                str(output_dir), # Expects string path
-                sheet_types
+            # process_sheets returns Dict[sheet_name, Dict[status, output_path/message]]
+            single_file_processing_results: Dict[str, Dict] = excel_handler.process_sheets(
+                excel_file_path=actual_file_path,
+                output_folder=str(processed_dir_path),
+                sheet_types=sheet_types_to_process
             )
 
-            # Convert internal result format to Pydantic model format
-            file_results_model: Dict[str, ProcessingResultDetail] = {}
-            for sheet_name, result_dict in process_result.items():
-                 detail = ProcessingResultDetail(**result_dict) # Unpack dict into model
-                 file_results_model[sheet_name] = detail
-                 if detail.status == "error":
-                     has_error = True
-                 elif detail.status == "success" and detail.output_path:
-                     # Add successfully created files to project tracking
-                     output_file_name = Path(detail.output_path).name
-                     # Avoid duplicates if reprocessing
-                     if not any(f['path'] == detail.output_path for f in processed_output_files):
-                         processed_output_files.append({"path": detail.output_path, "name": output_file_name})
+            # Convert results to Pydantic models for response
+            sheet_results_pydantic: Dict[str, ProcessingResultDetail] = {}
+            for sheet_name, result_data in single_file_processing_results.items():
+                detail = ProcessingResultDetail(**result_data)
+                sheet_results_pydantic[sheet_name] = detail
+                if detail.status == "error":
+                    any_error_occurred = True
+                elif detail.status == "success" and detail.output_path:
+                    # Add to project records and for processing history
+                    output_file_name = Path(detail.output_path).name
+                    await current_project.add_file_record(detail.output_path, "processed", output_file_name)
+                    successfully_processed_outputs_for_record.append({"path": detail.output_path, "name": output_file_name})
 
-
-            results_for_response[file_name] = file_results_model
+            results_for_response[requested_file_name] = sheet_results_pydantic
 
         except Exception as e:
-            # Handle errors during the call to process_sheets itself
-            print(f"Error processing file {file_name}: {e}")
-            # Add an error entry for the entire file
-            results_for_response[file_name] = {
-                "file_error": ProcessingResultDetail(status="error", error=f"Failed to process file: {e}")
+            results_for_response[requested_file_name] = {
+                "file_level_error": ProcessingResultDetail(status="error", error=f"Unhandled exception processing file '{requested_file_name}': {str(e)}")
             }
-            has_error = True
+            any_error_occurred = True
+            import traceback
+            traceback.print_exc()
 
-    # Add successfully processed files to the project metadata under 'processed' type
-    for f_info in processed_output_files:
-        # get the file name from the path with the extension
-        processed_file_name = Path(f_info['path']).name
-        await current_project.create_file(processed_file_name, "processed") # Use 'processed' category
-
+    # Add a consolidated processing record
+    input_files_for_record = [input_file_paths_from_project[f.name] for f in request_data.files if f.name in input_file_paths_from_project]
     await current_project.add_processing_record(
-        operation="excel_processing",
-        input_files=[file_info.path for file_info in request_data.files], 
-        output_files=processed_output_files,
-        details={"sheet_types_requested": {file_info.name: file_info.sheets for file_info in request_data.files}}
+        operation="excel_sheet_processing",
+        input_files=input_files_for_record,
+        output_files=successfully_processed_outputs_for_record, # List of {"path": ..., "name": ...}
+        details={"requested_processing": request_data.model_dump()} # Save the original request details
     )
-    await current_project.save_metadata()
+
+    await current_project.save_metadata() # Save all changes (new files, history)
+    # Note: add_file_record and add_processing_record already call _broadcast_update.
+    # A final scan_and_update_files can ensure the broadcasted project state is fully current.
+    await current_project.scan_and_update_files()
+
 
     return ProcessingResultResponse(
-        status="error" if has_error else "success",
+        status="error" if any_error_occurred else "success",
         project_id=current_project.id,
         results=results_for_response
     )

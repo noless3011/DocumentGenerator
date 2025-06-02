@@ -208,8 +208,8 @@ const DocumentsHandlingMenu: React.FC<DocumentsHandlingProps> = () => {
             }
 
             const sheetsResult = await sheetsResponse.json();
-
-            const sheetOptions: SheetOption[] = sheetsResult.sheets.map((name: string) => ({
+            console.log('Sheets found:', sheetsResult);
+            const sheetOptions: SheetOption[] = sheetsResult.all_unique_sheets.map((name: string) => ({
                 name,
                 selected: true,
                 options: ['UI', 'Table'],

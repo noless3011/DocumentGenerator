@@ -1,114 +1,116 @@
 import litellm
-from utils.Message import Message
-from agents.IAgent import IAgent
+from typing import Optional
 from utils.Context import Context
-from utils.Project import Project # Assuming Project might be needed for context
+from utils.Project import Project
+from config import settings
 
-class ChatAgent(IAgent):
-    def __init__(self, model: str, project: Project = None):
+
+class ChatAgent:
+    """
+    Agent for handling chat conversations with project context.
+    """
+    
+    def __init__(self, model: str, project: Optional[Project] = None):
         self.model = model
-        self.message = Message()
-        self.project_context = None # Store project-level context if available
+        self.project = project
+        self.context = None
         if project:
-            self.project_context = project.context
-            self.update_context(project.context) # Initial context update
-
-    def _init_chat_system_message(self, context: Context | None) -> str:
-        # Basic system message, can be expanded based on context
-        project_name_info = f"You are interacting within a project called '{context.project_name}'." if context and context.project_name else "You are a helpful assistant."
+            self.update_context(project)
+    
+    def update_context(self, project: Project) -> None:
+        """Update the agent with the current project context."""
+        self.project = project
+        self.context = project.context if project else None
+    
+    def generate(self, project: Project, prompt: str) -> Optional[str]:
+        """
+        Generate a response to a chat message using project context.
         
-        # Further context details can be added here if needed for chat interactions
-        # For example, current open files, project status, etc.
-        # For now, keeping it simple.
-        
-        return (
-            f"{project_name_info} "
-            f"You can process user messages, answer questions, or execute commands. "
-            f"Commands usually start with a '/'. For example, '/create filename.txt content' or '/edit filename.md Please change X to Y.'"
-            f"When asked to create or edit files, respond with a confirmation or the result. "
-            f"If a command is not clear, ask for clarification."
-        ).strip()
-
-    def update_context(self, context: Context) -> None:
-        self.project_context = context # Store the latest context
-        system_message = self._init_chat_system_message(context)
-        self.message.replace_init_message(system_message)
-
-    def generate(self, prompt: str, context: Context) -> str | None:
-        if not prompt:
-            print("Prompt is empty. Skipping generation/command.")
-            return None
-
-        # Ensure the agent's context (and thus system message) is up-to-date
-        # This might be redundant if update_context is always called before, but good for safety.
-        if self.project_context != context: # Optimize to avoid redundant system message updates
-            self.update_context(context)
-        
-        # Add the user's prompt (message or command) to the conversation
-        # The system message is already the first message due to update_context/constructor.
-        self.message.add_user_text(prompt)
-
+        Args:
+            project: The current project instance
+            prompt: The user's message
+            
+        Returns:
+            AI response string or None if generation fails
+        """
         try:
+            # Ensure we have the latest project context
+            self.update_context(project)
+            
+            # Build context information
+            context_info = self._build_context_string()
+            
+            # Create the system message with project context
+            system_message = f"""You are a helpful AI assistant working on a document generation project.
+
+Project Context:
+{context_info}
+
+You can help users with:
+- Analyzing project files and data
+- Answering questions about the project
+- Providing suggestions for documentation
+- Explaining project structure and content
+- General assistance with document generation
+
+Be concise but informative in your responses."""
+
+            messages = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ]
+            
+            # Use litellm to call the AI model
             response = litellm.completion(
                 model=self.model,
-                messages=self.message.get_conversation()
+                messages=messages,
+                api_key=settings.GEMINI_API_KEY
             )
-            response_content = response.choices[0].message.content
             
-            # Append LLM's response to maintain conversation flow
-            self.message.append_llm_response(response_content)
+            return response.choices[0].message.content
             
-            # For a chat agent, the direct response_content is usually what's returned.
-            # If it's a /create command, the backend API should handle file creation,
-            # and the LLM's response here would be a confirmation or status.
-            return response_content
-
         except Exception as e:
-            print(f"Error during litellm completion in ChatAgent.generate: {e}")
-            self.message.append_llm_response(f"Error processing your request: {e}") # Add error to conversation
-            return f"Error: Could not process your request. {e}"
-
-    def edit(self, prompt: str, attached_context: str, context: Context) -> str | None:
-        if not prompt:
-            print("Edit prompt (instructions) is empty. Skipping edit.")
+            print(f"Error in ChatAgent.generate: {e}")
             return None
+    
+    def _build_context_string(self) -> str:
+        """Build a context string from the current project."""
+        if not self.context:
+            return "No project context available."
         
-        if not attached_context:
-            print("Attached context (content to edit) is empty. Skipping edit.")
-            return None
-
-        # Ensure the agent's context (and thus system message) is up-to-date
-        if self.project_context != context:
-            self.update_context(context)
-
-        # Construct the edit message for the LLM
-        # The system message is already set.
-        edit_instruction = (
-            f"You are tasked with editing the following content based on my instructions.\n\n"
-            f"Original Content:\n```\n{attached_context}\n```\n\n"
-            f"My editing instructions are:\n{prompt}\n\n"
-            f"Please provide the fully revised content based on these instructions."
-        )
-
-        self.message.add_user_text(edit_instruction)
-
-        try:
-            response = litellm.completion(
-                model=self.model,
-                messages=self.message.get_conversation()
-            )
-            response_content = response.choices[0].message.content
-            
-            # Append LLM's response
-            self.message.append_llm_response(response_content)
-            
-            # The response_content should be the edited text.
-            # If it's an edit command for a file, the backend API handles actual file system changes.
-            # The LLM provides the *new content* for that file or message.
-            return response_content
-
-        except Exception as e:
-            print(f"Error during litellm completion in ChatAgent.edit: {e}")
-            self.message.append_llm_response(f"Error processing your edit request: {e}")
-            return f"Error: Could not process your edit request. {e}"
-
+        context_parts = [
+            f"Project Name: {self.context.project_name}",
+            f"Tech Stack: {self.context.tech_stack or 'Not specified'}"
+        ]
+        
+        # Add requirements info
+        if self.context.requirements:
+            req = self.context.requirements
+            if req.input_description:
+                context_parts.append(f"Input Description: {req.input_description}")
+            if req.output_description:
+                context_parts.append(f"Output Description: {req.output_description}")
+            if req.features:
+                features_str = ", ".join([f"{k}: {v}" for k, v in req.features.items()])
+                context_parts.append(f"Features: {features_str}")
+            if req.further_requirements:
+                context_parts.append(f"Additional Requirements: {req.further_requirements}")
+        
+        # Add file information
+        if self.project:
+            input_files = len(self.project.files.get("input", []))
+            processed_files = len(self.project.files.get("processed", []))
+            output_files = len(self.project.files.get("output", []))
+            context_parts.append(f"Files - Input: {input_files}, Processed: {processed_files}, Output: {output_files}")
+        
+        # Add CSV data preview if available
+        if self.context.csv_description:
+            context_parts.append(f"CSV Data: {len(self.context.csv_description)} files processed")
+            # Add a preview of the first CSV file (truncated)
+            if self.context.csv_description[0]:
+                preview = self.context.csv_description[0][:500]
+                if len(self.context.csv_description[0]) > 500:
+                    preview += "..."
+                context_parts.append(f"CSV Preview: {preview}")
+        
+        return "\n".join(context_parts)

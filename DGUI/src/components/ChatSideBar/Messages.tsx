@@ -15,6 +15,7 @@ const MessageComponent: React.FC<MessageComponentProps> = ({ message }) => {
     const isUser = message.sender === 'user';
     const isAssistant = message.sender === 'assistant';
     const isSystem = message.sender === 'system';
+    const isFileContent = message.filename && message.language;
 
     let bgColor = 'bg-gray-100 text-gray-800';
     let textAlign = 'justify-start';
@@ -29,6 +30,11 @@ const MessageComponent: React.FC<MessageComponentProps> = ({ message }) => {
         senderName = 'System';
     }
 
+    if (isFileContent) {
+        bgColor = 'bg-green-100 text-green-800';
+        senderName = 'File Content';
+    }
+
     return (
         <div
             className={`flex my-2 px-2 ${textAlign}`}
@@ -37,7 +43,12 @@ const MessageComponent: React.FC<MessageComponentProps> = ({ message }) => {
             <div
                 className={`max-w-xl md:max-w-2xl rounded-lg px-4 py-2 shadow-sm ${bgColor}`}
             >
-                <div className="message-content whitespace-pre-wrap break-words">
+                {isFileContent && (
+                    <div className="text-xs font-semibold mb-2 text-green-600">
+                        📄 {message.filename} ({message.language})
+                    </div>
+                )}
+                <div className={`message-content whitespace-pre-wrap break-words ${isFileContent ? 'font-mono text-sm bg-white p-2 rounded border' : ''}`}>
                     {message.content}
                 </div>
                 <div className={`text-xs mt-1 ${isUser ? 'text-blue-100 text-right' : 'text-gray-500 text-left'}`}>

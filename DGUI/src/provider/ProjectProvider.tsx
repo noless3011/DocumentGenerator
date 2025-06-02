@@ -1,7 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, use } from 'react';
-import { Project } from '../models/Project'; // Assuming this path is correct
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'; // Removed useCallback as it might not be used directly after changes
+import { Project } from '../models/Project'; // Assuming DocumentType is also in Project or a similar path
 import { DocumentType } from './WorkspaceProvider';
-
 
 interface ProjectContextType {
     projects: Project[];
@@ -36,17 +35,48 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     const webSocketRef = useRef<WebSocket | null>(null);
 
     useEffect(() => {
-        fetchProjects();
-    }, []);
+        // fetchProjects(); // Original call
+        const initializeProjectState = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const details = await getProjectDetails();
+                if (details && details.id) {
+                    // A project is already open in the backend
+                    setCurrentProject(details);
+                    // Optionally, refresh the full list of projects in the background
+                    fetchProjects();
+                } else {
+                    // No project is currently open in the backend
+                    setCurrentProject(null);
+                    // Fetch all projects to show in the list if the user wants to open one
+                    await fetchProjects();
+                }
+            } catch (err) {
+                console.error('[ProjectContext] Error initializing project state:', err);
+                // If getProjectDetails fails (e.g. server down, or specific error like "no project open")
+                // it might throw an error. We should ensure currentProject is null.
+                setCurrentProject(null);
+                setError(err instanceof Error ? err.message : 'Failed to check initial project status');
+                // Still fetch projects so the user can open one if available
+                await fetchProjects();
+            } finally {
+                setLoading(false);
+            }
+        };
 
+        initializeProjectState();
+    }, []); // Empty dependency array ensures this runs once on mount
 
     useEffect(() => {
         if (currentProject && currentProject.id) {
+            // Connect Project WebSocket
             const wsUrl = `${WS_BASE_URL}/ws/${currentProject.id}`;
             const ws = new WebSocket(wsUrl);
             webSocketRef.current = ws;
 
             ws.onopen = () => {
+                console.log(`[ProjectContext] WebSocket connected to project: ${currentProject.id}`);
             };
 
             ws.onmessage = (event) => {
@@ -72,7 +102,8 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 console.error('[ProjectContext] WebSocket error for project:', currentProject.id, err);
             };
 
-            ws.onclose = (event) => {
+            ws.onclose = (event) => { // Added event parameter
+                console.log(`[ProjectContext] WebSocket disconnected from project: ${currentProject?.id}, Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`);
                 if (webSocketRef.current === ws) {
                     webSocketRef.current = null;
                 }
@@ -87,12 +118,13 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 }
             };
         } else {
+            console.log(`[ProjectProvider useEffect] No active project or project ID. Current project state:`, currentProject); // Updated log
             if (webSocketRef.current) {
                 webSocketRef.current.close();
                 webSocketRef.current = null;
             }
         }
-    }, [currentProject?.id]); // Re-run if currentProject.id changes
+    }, [currentProject?.id]); // REMOVED chatContext from dependencies
 
 
     const getProjectById = (id: string): Project | undefined => {
@@ -136,16 +168,17 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             if (!response.ok) {
                 let errorDetail = `Failed to create project: ${response.status}`;
                 try {
-                    const errorResult = await response.json();
-                    errorDetail = errorResult.error || errorResult.detail || JSON.stringify(errorResult);
-                    console.error('[ProjectContext] Create API error response body:', errorResult);
-                } catch (e) { console.error('[ProjectContext] Create API could not parse error response body:', e); }
+                    const errBody = await response.json();
+                    errorDetail += errBody.detail ? (typeof errBody.detail === 'string' ? ` - ${errBody.detail}` : ` - ${JSON.stringify(errBody.detail)}`) : '';
+                } catch (e) { /* ignore if body isn't json */ }
                 throw new Error(errorDetail);
             }
 
-            const newProjectData = await getProjectDetails(); // This will call setCurrentProject
+            const newProjectData = await response.json() as Project;
+            setCurrentProject(newProjectData);
+            // chatContext.connectWebSocket is now handled by ChatProvider's useEffect
 
-            await fetchProjects(); // Refresh the list of all projects
+            await fetchProjects();
             return newProjectData;
 
         } catch (err) {
@@ -170,9 +203,18 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 mode: 'cors',
 
             });
+            if (!response.ok) {
+                let errorDetail = `Failed to load project: ${response.status}`;
+                try {
+                    const errBody = await response.json();
+                    errorDetail += errBody.detail ? (typeof errBody.detail === 'string' ? ` - ${errBody.detail}` : ` - ${JSON.stringify(errBody.detail)}`) : '';
+                } catch (e) { /* ignore if body isn't json */ }
+                throw new Error(errorDetail);
+            }
             const projectData = await response.json();
             const loadedProject = projectData as Project;
             setCurrentProject(loadedProject);
+            // chatContext.connectWebSocket is now handled by ChatProvider's useEffect
 
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to load project (unknown error)';
@@ -197,19 +239,17 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             if (!response.ok) {
                 let errorDetail = `Failed to close project: ${response.status}`;
                 try {
-                    const errorResult = await response.json();
-                    errorDetail = errorResult.error || errorResult.detail || JSON.stringify(errorResult);
-                } catch (e) { /* ignore if error body cannot be parsed */ }
+                    const errBody = await response.json();
+                    errorDetail += errBody.detail ? (typeof errBody.detail === 'string' ? ` - ${errBody.detail}` : ` - ${JSON.stringify(errBody.detail)}`) : '';
+                } catch (e) { /* ignore if body isn't json */ }
                 throw new Error(errorDetail);
             }
-            setCurrentProject(null); // This will trigger WebSocket cleanup in useEffect
+            setCurrentProject(null);
+            // chatContext.disconnectWebSocket is now handled by ChatProvider's useEffect
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to close project';
             setError(errorMessage);
             console.error('[ProjectContext] Error closing project:', err);
-            // currentProject might still be set if API call failed, but UI might expect it to be null.
-            // Depending on desired behavior, you might still setCurrentProject(null) or leave it.
-            // For now, only setting null on success.
             throw err;
         } finally {
             setLoading(false);
@@ -226,43 +266,33 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 mode: 'cors',
             });
             if (!response.ok) {
+                // For getProjectDetails, if it's a 404 or similar indicating no active project,
+                // it might not be a "throwable" error for the initial load, but rather a state.
+                if (response.status === 404) {
+                    // No project is actively loaded on the backend, which is a valid state.
+                    setCurrentProject(null); // Ensure frontend reflects this
+                    return null as any; // Or an appropriate empty Project-like structure / specific return
+                }
                 let errorDetail = `Failed to get project details: ${response.status}`;
                 try {
-                    const errorResult = await response.json();
-                    errorDetail = errorResult.error || errorResult.detail || JSON.stringify(errorResult);
-                } catch (e) { /* ignore */ }
+                    const errBody = await response.json();
+                    errorDetail += errBody.detail ? (typeof errBody.detail === 'string' ? ` - ${errBody.detail}` : ` - ${JSON.stringify(errBody.detail)}`) : '';
+                } catch (e) { /* ignore if body isn't json */ }
                 throw new Error(errorDetail);
             }
-            const projectDetails = await response.json() as Project; // Backend /details returns ProjectInfo
-
-            // If these details are for the project that is (or should be) current, update the state.
-            // This is especially useful if getProjectDetails is called after createProject.
+            const projectDetails = await response.json() as Project;
             if (projectDetails && projectDetails.id) {
-                // Check if it's a new project being set, or an update to the existing current one.
-                if (!currentProject || (currentProject && currentProject.id === projectDetails.id)) {
-                    setCurrentProject(projectDetails);
-                } else if (currentProject && currentProject.id !== projectDetails.id) {
-                    // This case implies /details returned a project different from what frontend thought was current.
-                    // This shouldn't happen if /details always returns the backend's actual current project.
-                    // Could indicate backend's current project changed unexpectedly.
-                    console.warn('[ProjectContext] getProjectDetails returned a project different from current. Updating currentProject.', projectDetails);
-                    setCurrentProject(projectDetails);
-                }
+                // This means a project is active on the backend.
+                // setCurrentProject(projectDetails); // This might cause a loop if called from initializeProjectState's try block without care
             } else {
-                console.warn('[ProjectContext] getProjectDetails returned invalid data or no ID.');
-                // If no project is active on the backend, /details throws an error,
-                // so this path (valid response but no projectDetails.id) is less likely.
+                // No project active or details are incomplete.
+                // setCurrentProject(null);
             }
             return projectDetails;
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to get project details';
             setError(errorMessage);
             console.error('[ProjectContext] Error getting project details:', err);
-            // If getProjectDetails fails, do not change currentProject unless it implies no project is active.
-            // The backend /details endpoint itself will raise HTTPException if no active project.
-            // So, if we are in catch here, it means the request failed.
-            // If currentProject was set, and details for *that* project failed, should we nullify it?
-            // Probably not, let the WebSocket handle its state or a specific closeProject call.
             throw err;
         } finally {
             setLoading(false);

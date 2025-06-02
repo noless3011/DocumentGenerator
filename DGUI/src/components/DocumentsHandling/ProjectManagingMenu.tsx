@@ -25,7 +25,8 @@ const ProjectManagingMenu: React.FC<ProjectManagingMenuProps> = ({ onProjectLoad
         fetchProjects,
         createProject,
         loadProject,
-        closeProject
+        closeProject,
+        getProjectDetails
     } = useProjects();
 
     const handleSelectDirectory = async () => {

@@ -1,4 +1,3 @@
-# dependencies.py
 from typing import Dict, Optional, Annotated
 from fastapi import Depends, HTTPException, status
 
@@ -7,7 +6,11 @@ from agents.IAgent import IAgent
 from utils.Project import Project
 from utils.ExcelFileHandler import ExcelFileHandler
 
-app_state: dict = {"current_project": None}
+app_state: dict = {
+    "current_project": None,
+    "agent_instances": {}, # For general purpose agents (Text, Diagram, Proto)
+    "chat_agents": {}      # For ChatAgents, keyed by project_id
+}
 
 # --- Dependency Functions ---
 
@@ -17,56 +20,32 @@ def get_app_state() -> dict:
 
 def get_excel_handler() -> ExcelFileHandler:
     """Provides an instance of the ExcelFileHandler."""
-    # Could add configuration here if needed
     return ExcelFileHandler()
 
-# Store the agent instance globally within this module, the user can add multiple instances of the same agent type but with different names
-_agent_instances: Dict[str, IAgent] = {}
-
-def add_agent_instance(agent_name: str, agent: IAgent) -> None:
-    """Adds a agent instance to the global dictionary."""
-    _agent_instances[agent_name] = agent
+def register_agent_instance(agent_name: str, agent: IAgent) -> None:
+    """Registers a shared agent instance."""
+    app_state["agent_instances"][agent_name] = agent
+    print(f"Agent '{agent_name}' of type {type(agent).__name__} registered.")
 
 def get_agent_instance(agent_name: str) -> IAgent:
-    """Retrieves a agent instance from the global dictionary."""
-    if agent_name not in _agent_instances:
+    """Retrieves a registered shared agent instance."""
+    agent = app_state["agent_instances"].get(agent_name)
+    if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"agent '{agent_name}' not found."
+            detail=f"Shared agent '{agent_name}' not found. Ensure it's registered at startup."
         )
-    return _agent_instances[agent_name]
+    return agent
 
-def remove_agent_instance(agent_name: str = None) -> None:
-    """
-    Removes a agent instance from the global dictionary.
-    If agent_name is None, removes all agent instances.
-    """
-    if agent_name is None:
-        _agent_instances.clear()
-    elif agent_name in _agent_instances:
-        del _agent_instances[agent_name]
-
-def get_agent_with_type(agent_type: str) -> Dict[str, IAgent]:
-    """
-    Retrieves all agent instances of a specific type from the global dictionary.
-    
-    Args:
-        agent_type (str): The type name of the agent to retrieve (e.g., "TextDocumentAgent")
-        
-    Returns:
-        Dict[str, IAgent]: Dictionary of agents matching the specified type
-    """
-    result = {}
-    for name, agent in _agent_instances.items():
-        # Check agent class name against the requested type
-        if agent.__class__.__name__ == agent_type:
-            result[name] = agent
-    return result
-
-def clear_agent_instances() -> None:
-    """Clears all agent instances from the global dictionary."""
-    _agent_instances.clear()
-
+def get_chat_agent(project_id: str, state: Annotated[dict, Depends(get_app_state)]) -> Optional[IAgent]:
+    """Retrieves the ChatAgent for a specific project_id."""
+    chat_agent = state["chat_agents"].get(project_id)
+    if not chat_agent:
+        # Optionally, you could try to lazy-initialize it here if the project is loaded
+        # but for WebSocket, it's better if it's already there from project load.
+        print(f"Chat agent for project_id '{project_id}' not found in app_state.")
+        return None
+    return chat_agent
 
 
 def get_current_project(state: Annotated[dict, Depends(get_app_state)]) -> Project:
@@ -85,3 +64,14 @@ def get_current_project(state: Annotated[dict, Depends(get_app_state)]) -> Proje
 def get_optional_current_project(state: Annotated[dict, Depends(get_app_state)]) -> Optional[Project]:
     """Retrieves the current project if one is active, otherwise returns None."""
     return state.get("current_project")
+
+# --- Functions to manage agent instances (can be called at app startup/shutdown) ---
+def clear_all_agent_instances():
+    app_state["agent_instances"].clear()
+    app_state["chat_agents"].clear()
+    print("All agent instances cleared.")
+
+def remove_chat_agent_for_project(project_id: str):
+    if project_id in app_state["chat_agents"]:
+        del app_state["chat_agents"][project_id]
+        print(f"Chat agent for project {project_id} removed.")

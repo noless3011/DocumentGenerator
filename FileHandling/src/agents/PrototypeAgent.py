@@ -1,171 +1,203 @@
 import litellm
-from pathlib import Path
-import base64
-from utils.Project import Project
-from utils.Message import Message
-from agents.IAgent import IAgent
+from typing import Optional
 from utils.Context import Context
+from utils.Project import Project
+from config import settings
 
-class PrototypeAgent(IAgent):
-    def __init__(self, model: str):
-        self.model = model
-        self.message = Message()
 
-    def generate(self, context: Context) -> str:
-        """Generate a HTML preview of the images in the project."""
-        # Initialize message with context if needed
-        self.update_context(context)
-        
-        if not context.diagram_image or len(context.diagram_image) == 0:
-            # Fallback HTML content if no images are found
-            html_content = """
-            <html>
-            <head><title>Preview App</title></head>
-            <body>
-                <div style="text-align: center;">
-                    <h1>Preview App</h1>
-                    <div style="margin: 20px;">
-                        <p>No image files were found in this project. Please process some Excel files or add images to generate a preview.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-            return html_content
-        
-        # Add images to the message
-        for image in context.diagram_image:
-            self.message.add_user_image_from_file(image)
-        
-        self.message.add_user_text("From these images, write a detailed prompt to create a preview app using only HTML. Describe the flow process in detail so another AI can understand the full context of the application shown in the images.")
-
-        response = litellm.completion(
-            model=self.model,
-            messages=self.message.get_conversation()
-        )
-
-        self.message.append_llm_response(response)
-        generated_prompt = response.choices[0].message.content
-        secondary_message = f"""
-        Based on the following detailed prompt and the images I give you, generate a preview app using only HTML, CSS, and JavaScript.
-        The preview should be fully functional as a static HTML page and visually match the screens in the images.
-        Ensure the app:
-        1. Is a single HTML file (no separate files).
-        2. Is responsive and well-designed.
-        3. Includes navigation to access different screens/views shown in the images.
-        4. Uses vanilla JavaScript for interactivity (no external libraries).
-        5. Has a clean, professional design.
-        6. Implements client-side navigation using JavaScript to show and hide different sections/views within the single HTML file.
-        7. Do not have any explaination, just the code.
-        8. Do not include any comments in the code.
-        
-
-        Detailed Prompt:
-        {generated_prompt}
-
-        Generate the complete HTML code, including embedded CSS in `<style>` tags and JavaScript in `<script>` tags.
-        """
-        self.message.add_user_text(secondary_message)
-
-        response = litellm.completion(
-            model=self.model,
-            messages=self.message.get_conversation()
-        )
-        self.message.append_llm_response(response)
-
-        html_content = response.choices[0].message.content
-        # remove everything above <!DOCTYPE html> and below </html>
-        # Find the start of the HTML document
-        start_index = html_content.find('<!DOCTYPE html>')
-        # Find the end of the HTML document
-        end_index = html_content.rfind('</html>') + len('</html>')
-        # Extract the HTML content
-        html_content = html_content[start_index:end_index]
-
-        
-        return html_content
-        
-    def update_context(self, context: Context) -> None:
-        """
-        Update the agent's context.
-        
-        Args:
-            context (Context): The new context to set
-        """
-        # Reset message to clean state
-        self.message = Message()
-        
-        # Initialize with system message about the agent's purpose
-        init_message = f"""
-        You are a prototype UI generator for a web application. Your task is to analyze UI mockup images and generate 
-        a functional HTML prototype that resembles the provided designs as closely as possible.
-        
-        Project: {context.project_name}
-        Description: {context.requirements.input_description if context.requirements else ""}
-        
-        Create a prototype that:
-        1. Matches the visual design of the provided mockups
-        2. Implements basic navigation and UI interactions
-        3. Shows all main screens visible in the mockups
-        4. Uses placeholder content where appropriate
-        5. Has a consistent look and feel throughout
-        """
-        
-        self.message.add_system_text(init_message.strip())
+class PrototypeAgent:
+    """
+    Agent for generating HTML prototypes/mockups based on project requirements.
+    """
     
-    def edit(self, prompt: str, attached_context: str, context: Context) -> str:
+    def __init__(self, model: str, project: Optional[Project] = None):
+        self.model = model
+        self.project = project
+        self.context = None
+        if project:
+            self.update_context(project)
+    
+    def update_context(self, project: Project) -> None:
+        """Update the agent with the current project context."""
+        self.project = project
+        self.context = project.context if project else None
+    
+    def generate(self, project: Project, prompt: str = None) -> Optional[str]:
         """
-        Edit a prototype HTML using the provided message and context.
+        Generate an HTML prototype based on project context and requirements.
         
         Args:
-            prompt (str): The editing instructions
-            attached_context (str): Additional context for the edit
-            context (Context): The full context
+            project: The current project instance
+            prompt: Optional specific instructions for the prototype
             
         Returns:
-            str: The edited HTML content
+            Generated HTML content or None if generation fails
         """
-        if not prompt:
-            print("Prompt is empty. Skipping editing.")
-            return None
-            
-        # Update the context first
-        self.update_context(context)
-        
-        # Add current HTML to modify
-        if attached_context:
-            self.message.add_user_text(f"Here is the current HTML prototype:\n\n```html\n{attached_context}\n```")
-            
-        # Add edit instructions
-        self.message.add_user_text(f"Please modify the HTML prototype according to these instructions:\n{prompt}\n\nProvide the complete updated HTML file with all changes applied.")
-        
         try:
+            # Ensure we have the latest project context
+            self.update_context(project)
+            
+            # Build context information
+            context_info = self._build_context_string()
+            
+            # Determine what type of prototype to generate based on context
+            prototype_description = prompt or self._determine_prototype_type()
+            
+            # Create the system message for prototype generation
+            system_message = f"""You are a web developer and UI/UX expert. Generate complete, functional HTML prototypes based on project requirements.
+
+Project Context:
+{context_info}
+
+Guidelines for HTML prototype generation:
+- Create a complete, standalone HTML file with embedded CSS and JavaScript
+- Use modern, responsive design principles
+- Include proper HTML5 structure with semantic elements
+- Use CSS Grid or Flexbox for layouts
+- Make the design clean, professional, and user-friendly
+- Include interactive elements where appropriate
+- Use meaningful placeholder content based on the project context
+- Ensure accessibility with proper ARIA labels and semantic HTML
+- Include navigation, forms, tables, or other components as needed
+- Use a consistent color scheme and typography
+- Make it mobile-responsive
+- Include sample data from the project context where relevant
+
+The prototype should be a complete, working HTML page that demonstrates the application concept."""
+
+            messages = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": f"Generate an HTML prototype: {prototype_description}"}
+            ]
+            
+            # Use litellm to call the AI model
             response = litellm.completion(
                 model=self.model,
-                messages=self.message.get_conversation()
+                messages=messages,
+                api_key=settings.GEMINI_API_KEY
             )
             
-            self.message.append_llm_response(response)
-            edited_html = response.choices[0].message.content
+            content = response.choices[0].message.content
             
-            # Extract just the HTML content
-            start_index = edited_html.find('<!DOCTYPE html>')
-            if start_index == -1:
-                # Try to find just the HTML tag if DOCTYPE is missing
-                start_index = edited_html.find('<html')
-                if start_index == -1:
-                    print("Could not find valid HTML in the response")
-                    return None
-                    
-            end_index = edited_html.rfind('</html>') + len('</html>')
-            if end_index <= len('</html>'):
-                print("Could not find end of HTML in the response")
-                return None
-                
-            edited_html = edited_html[start_index:end_index]
-            return edited_html
+            # Extract HTML from the response if it's in code blocks
+            html_content = self._extract_html(content)
+            
+            return html_content or content
             
         except Exception as e:
-            print(f"Error editing HTML prototype: {e}")
+            print(f"Error in PrototypeAgent.generate: {e}")
             return None
+    
+    def _determine_prototype_type(self) -> str:
+        """Determine what type of prototype to generate based on project context."""
+        if not self.context:
+            return "A general web application interface"
+        
+        # Analyze project context to determine prototype type
+        project_name = self.context.project_name.lower()
+        tech_stack = (self.context.tech_stack or "").lower()
+        
+        # Check requirements for clues
+        features = []
+        if self.context.requirements:
+            req = self.context.requirements
+            features.extend([
+                req.input_description or "",
+                req.output_description or "",
+                " ".join(req.features.values()) if req.features else "",
+                req.further_requirements or ""
+            ])
+        
+        features_text = " ".join(features).lower()
+        
+        # Determine prototype type based on keywords
+        if any(word in project_name + tech_stack + features_text for word in ["dashboard", "admin", "management"]):
+            return "An administrative dashboard with data tables, charts, and management controls"
+        elif any(word in project_name + tech_stack + features_text for word in ["shop", "store", "ecommerce", "product"]):
+            return "An e-commerce interface with product listings, shopping cart, and checkout"
+        elif any(word in project_name + tech_stack + features_text for word in ["chat", "messaging", "communication"]):
+            return "A messaging or chat application interface"
+        elif any(word in project_name + tech_stack + features_text for word in ["blog", "news", "article", "content"]):
+            return "A content management or blog interface"
+        elif any(word in project_name + tech_stack + features_text for word in ["form", "survey", "input", "data entry"]):
+            return "A data entry form interface with validation and submission"
+        elif any(word in project_name + tech_stack + features_text for word in ["report", "analytics", "chart", "graph"]):
+            return "A reporting and analytics dashboard with charts and data visualization"
+        elif self.context.csv_description:
+            return "A data management interface for viewing, editing, and analyzing tabular data"
+        else:
+            return f"A web application interface for {self.context.project_name}"
+    
+    def _extract_html(self, content: str) -> Optional[str]:
+        """Extract HTML from the AI response."""
+        # Look for HTML within code blocks
+        import re
+        html_pattern = r'```(?:html)?\s*(<!DOCTYPE html.*?</html>)\s*```'
+        matches = re.findall(html_pattern, content, re.DOTALL | re.IGNORECASE)
+        
+        if matches:
+            return matches[0]
+        
+        # Look for HTML-like content (starting with <!DOCTYPE or <html>)
+        html_start_patterns = [r'<!DOCTYPE html', r'<html']
+        
+        for pattern in html_start_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                start = match.start()
+                # Find the closing </html> tag
+                end_match = re.search(r'</html>', content[start:], re.IGNORECASE)
+                if end_match:
+                    end = start + end_match.end()
+                    return content[start:end]
+        
+        return None
+    
+    def _build_context_string(self) -> str:
+        """Build a context string from the current project."""
+        if not self.context:
+            return "No project context available."
+        
+        context_parts = [
+            f"Project Name: {self.context.project_name}",
+            f"Tech Stack: {self.context.tech_stack or 'Web-based application'}"
+        ]
+        
+        # Add requirements info
+        if self.context.requirements:
+            req = self.context.requirements
+            if req.input_description:
+                context_parts.append(f"Input Requirements: {req.input_description}")
+            if req.output_description:
+                context_parts.append(f"Output Requirements: {req.output_description}")
+            if req.features:
+                features_list = [f"- {k}: {v}" for k, v in req.features.items()]
+                context_parts.append(f"Key Features:\n" + "\n".join(features_list))
+            if req.further_requirements:
+                context_parts.append(f"Additional Requirements: {req.further_requirements}")
+        
+        # Add data structure information for UI design
+        if self.context.csv_description:
+            context_parts.append(f"Data Sources: {len(self.context.csv_description)} CSV files available")
+            
+            # Extract column information for form/table design
+            for i, csv_data in enumerate(self.context.csv_description):
+                if csv_data:
+                    lines = csv_data.split('\n')
+                    if lines:
+                        headers = lines[0] if lines[0] else "No headers"
+                        context_parts.append(f"Data Structure {i+1} - Columns: {headers}")
+                        
+                        # Add a few sample rows for context
+                        if len(lines) > 1:
+                            sample_rows = lines[1:4]  # Get 3 sample rows
+                            context_parts.append(f"Sample Data {i+1}:")
+                            for row in sample_rows:
+                                if row.strip():
+                                    context_parts.append(f"  {row}")
+        
+        # Add UI image context if available
+        if self.context.ui_image:
+            context_parts.append(f"UI References: {len(self.context.ui_image)} UI images available for design inspiration")
+        
+        return "\n".join(context_parts)

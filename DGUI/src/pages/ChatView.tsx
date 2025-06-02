@@ -2,16 +2,16 @@ import { useRef } from "react";
 import ChatWindow from "../components/ChatSideBar/ChatWindow";
 import ContextFileList from "../components/ChatSideBar/ContextFileList";
 import MessageComponent from "../components/ChatSideBar/Messages";
+import CommandPanel from "../components/ChatSideBar/CommandPanel";
 import { useChat } from "../provider/ChatProvider";
 import { Message } from "../models/Message"; // Added Message import from models
 
 const ChatView = () => {
     const { messages, sendMessage } = useChat();
 
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    return (
+    const containerRef = useRef<HTMLDivElement>(null); return (
         <div ref={containerRef} className="flex flex-col-reverse flex-1 h-full">
+            <CommandPanel />
             <div className="flex flex-row w-full">
                 <button
                     className="px-4 py-2 rounded-md hover:bg-black/25 ml-auto mr-2 my-1 flex items-center"
