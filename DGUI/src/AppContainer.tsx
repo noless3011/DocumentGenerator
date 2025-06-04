@@ -1,10 +1,5 @@
-import React, { useState } from 'react';
-import DocumentsHandlingMenu from './components/DocumentsHandlingMenu';
+import React from 'react';
 import WorkspaceView from './pages/WorkspaceView';
-import ProjectManagingMenu from './components/DocumentsHandling/ProjectManagingMenu';
-import { useProjects } from './provider/ProjectProvider';
-import ClassDiagramCanvas from './components/DiagramComponents/ClassDiagramCanvas';
-import DatabaseDiagramCanvas from './components/DiagramComponents/DatabaseDiagramCanvas';
 import TopBar from './components/TopBar';
 import { WorkspaceProvider } from './provider/WorkspaceProvider';
 

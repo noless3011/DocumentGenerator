@@ -1,6 +1,5 @@
 from typing import Dict, Optional, Annotated
 from fastapi import Depends, HTTPException, status
-
 from config import settings
 from agents.IAgent import IAgent
 from utils.Project import Project

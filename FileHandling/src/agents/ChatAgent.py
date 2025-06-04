@@ -1,27 +1,30 @@
 import litellm
-from typing import Optional
+import base64
+import os
+from typing import Optional, List, Dict, Any
 from utils.Context import Context
 from utils.Project import Project
 from config import settings
+from agents.MultimodalMixin import MultimodalMixin
 
 
-class ChatAgent:
+class ChatAgent(MultimodalMixin):
     """
     Agent for handling chat conversations with project context.
     """
-    
     def __init__(self, model: str, project: Optional[Project] = None):
+        super().__init__()
         self.model = model
         self.project = project
         self.context = None
         if project:
             self.update_context(project)
-    
     def update_context(self, project: Project) -> None:
         """Update the agent with the current project context."""
         self.project = project
         self.context = project.context if project else None
-    
+        super().update_context(project)  # Call mixin's update_context
+
     def generate(self, project: Project, prompt: str) -> Optional[str]:
         """
         Generate a response to a chat message using project context.
@@ -52,12 +55,14 @@ You can help users with:
 - Providing suggestions for documentation
 - Explaining project structure and content
 - General assistance with document generation
+- Analyzing uploaded images and screenshots from the project
 
-Be concise but informative in your responses."""
-
+Be concise but informative in your responses. When you see images, analyze them and provide insights about the UI/UX design, functionality, or any visual elements that might be relevant to the project documentation."""            # Prepare multimodal content for the user message
+            user_content = self._prepare_multimodal_content(prompt)
+            
             messages = [
                 {"role": "system", "content": system_message},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": user_content}
             ]
             
             # Use litellm to call the AI model
@@ -112,5 +117,4 @@ Be concise but informative in your responses."""
                 if len(self.context.csv_description[0]) > 500:
                     preview += "..."
                 context_parts.append(f"CSV Preview: {preview}")
-        
         return "\n".join(context_parts)

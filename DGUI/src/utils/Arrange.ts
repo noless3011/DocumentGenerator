@@ -80,9 +80,7 @@ export function gridLayout<T extends Record<string, unknown>>(
   });
 }
 
-/**
- * Arranges nodes in a circle layout
- */
+
 export function circleLayout<T extends Record<string, unknown>>(
   nodes: Node<T>[],
   options: LayoutOptions = {}

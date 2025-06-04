@@ -151,10 +151,10 @@ const WorkspaceView: React.FC = () => {
 
     return (
         <div className="flex flex-col w-full max-w-full bg-gray-50 flex-1 overflow-hidden">
-            <div ref={containerRef} className="flex flex-row h-full overflow-hidden relative">
-                {explorerPanelVisible ?
-                    (<div className="flex-shrink-0 h-full flex flex-col"
-                        style={{ width: `${explorerPanelWidthPx}px` }}>
+            <div ref={containerRef} className="flex flex-row h-full overflow-hidden relative">                {explorerPanelVisible ?
+                (<div className="flex-shrink-0 h-full flex flex-col"
+                    style={{ width: `${explorerPanelWidthPx}px` }}>
+                    <ChatProvider>
                         <ExplorerPane
                             onFileSelect={(fileId, filePath, fileType) => {
                                 // Convert fileType string to TabType enum
@@ -162,15 +162,16 @@ const WorkspaceView: React.FC = () => {
                                 addTab(fileId, filePath, DocumentType[tabType]);
                             }}
                         />
-                    </div>)
-                    :
-                    (<button
-                        title='Show explorer panel'
-                        className="absolute bottom-6 left-6 p-2 bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 transition-colors z-20"
-                        onClick={toggleExplorerPanel}
-                    >
-                        <AccountTree style={{ fontSize: '1.25rem' }} />
-                    </button>)}
+                    </ChatProvider>
+                </div>)
+                :
+                (<button
+                    title='Show explorer panel'
+                    className="absolute bottom-6 left-6 p-2 bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 transition-colors z-20"
+                    onClick={toggleExplorerPanel}
+                >
+                    <AccountTree style={{ fontSize: '1.25rem' }} />
+                </button>)}
 
                 {explorerPanelVisible && (
                     <div

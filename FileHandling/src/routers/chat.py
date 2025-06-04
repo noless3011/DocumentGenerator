@@ -131,6 +131,32 @@ async def websocket_chat_endpoint(
                                 await websocket.send_json({"type": "file_content", "filename": filename, "content": edited_content, "lang": "markdown"})
                             else:
                                 await websocket.send_json({"type": "error_message", "text": "Failed to edit document content."})
+                        elif filename.lower().endswith(".json"):
+                            diagram_agent: IAgent = get_agent_instance(settings.DEFAULT_DIAGRAM_AGENT_NAME)
+                            diagram_agent.update_context(current_project_global)
+                            edited_content = diagram_agent.edit(instructions, current_content, current_project_global)
+                            if edited_content:
+                                with open(file_path_to_edit, 'w', encoding='utf-8') as f:
+                                    f.write(edited_content)
+                                await current_project_global.scan_and_update_files()
+                                await current_project_global.save_metadata()
+                                await websocket.send_json({"type": "system_message", "text": f"Diagram '{filename}' updated."})
+                                await websocket.send_json({"type": "file_content", "filename": filename, "content": edited_content, "lang": "json"})
+                            else:
+                                await websocket.send_json({"type": "error_message", "text": "Failed to edit diagram content."})
+                        elif filename.lower().endswith(".html"):
+                            proto_agent: IAgent = get_agent_instance(settings.DEFAULT_PROTOTYPE_AGENT_NAME)
+                            proto_agent.update_context(current_project_global)
+                            edited_content = proto_agent.edit(instructions, current_content, current_project_global)
+                            if edited_content:
+                                with open(file_path_to_edit, 'w', encoding='utf-8') as f:
+                                    f.write(edited_content)
+                                await current_project_global.scan_and_update_files()
+                                await current_project_global.save_metadata()
+                                await websocket.send_json({"type": "system_message", "text": f"Prototype '{filename}' updated."})
+                                await websocket.send_json({"type": "file_content", "filename": filename, "content": edited_content, "lang": "html"})
+                            else:
+                                await websocket.send_json({"type": "error_message", "text": "Failed to edit prototype content."})
                         else:
                             await websocket.send_json({"type": "error_message", "text": f"Editing for file type of '{filename}' not supported via chat yet."})
 
@@ -201,3 +227,4 @@ async def websocket_chat_endpoint(
                 await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
             except: # Ignore errors during cleanup send/close
                 pass
+            

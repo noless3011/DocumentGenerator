@@ -17,6 +17,7 @@ interface ChatContextType {
     sendCommand: (command: ChatCommand) => void;
     isChatConnected: boolean;
     chatError: string | null;
+    isGenerating: boolean;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -30,6 +31,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     const [inputValue, setInputValue] = useState<string>('');
     const [isChatConnected, setIsChatConnected] = useState<boolean>(false);
     const [chatError, setChatError] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState<boolean>(false);
 
     const webSocketRef = useRef<WebSocket | null>(null);
     const { currentProject } = useProjects();
@@ -53,12 +55,11 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     useEffect(() => {
         if (currentProject && currentProject.id) {
             const projectId = currentProject.id;
-            const wsUrl = `${WS_BASE_URL}/ws/chat/${projectId}`;
-
-            // Clear previous state when project changes
+            const wsUrl = `${WS_BASE_URL}/ws/chat/${projectId}`;            // Clear previous state when project changes
             setMessages([]);
             setChatError(null);
             setIsChatConnected(false);
+            setIsGenerating(false); // Reset generating state when connecting to new project
             addSystemMessage(`Attempting to connect to chat for project: ${currentProject.name || projectId}...`);
 
             if (webSocketRef.current) {
@@ -76,9 +77,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
                 console.log(`Chat WebSocket connected for project ${projectId}`);
             }; ws.onmessage = (event) => {
                 try {
-                    const receivedData = JSON.parse(event.data as string);
-
-                    if (receivedData.type === 'ai_response' && typeof receivedData.text === 'string') {
+                    const receivedData = JSON.parse(event.data as string); if (receivedData.type === 'ai_response' && typeof receivedData.text === 'string') {
                         const aiMessage: Message = {
                             id: Date.now().toString() + Math.random().toString(),
                             content: receivedData.text,
@@ -86,9 +85,11 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
                             timestamp: new Date().toISOString(),
                         };
                         setMessages(prev => [...prev, aiMessage]);
+                        setIsGenerating(false); // AI has finished generating
                     } else if (receivedData.type === 'error_message' && typeof receivedData.text === 'string') {
                         addSystemMessage(`Server error: ${receivedData.text}`, 'error');
                         console.error('Chat WebSocket error message from server:', receivedData.text);
+                        setIsGenerating(false); // Stop generating on error
                     } else if (receivedData.type === 'system_message' && typeof receivedData.text === 'string') {
                         addSystemMessage(receivedData.text);
                     } else if (receivedData.type === 'file_content' && receivedData.filename && receivedData.content) {
@@ -102,6 +103,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
                         };
                         setMessages(prev => [...prev, fileMessage]);
                         addSystemMessage(`File updated: ${receivedData.filename}`);
+                        setIsGenerating(false); // Command completed with file creation
                     } else {
                         console.warn('Received unknown message type or format:', receivedData);
                         addSystemMessage('Received an unhandled message format from the server.');
@@ -109,17 +111,20 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
                 } catch (e) {
                     console.error('Failed to parse WebSocket message or handle it:', e);
                     addSystemMessage('Error processing message from server.', 'error');
+                    setIsGenerating(false); // Stop generating on parse error
                 }
             };
 
             ws.onerror = (errorEvent) => {
                 console.error('Chat WebSocket error:', errorEvent);
                 setIsChatConnected(false);
+                setIsGenerating(false); // Stop generating on connection error
                 addSystemMessage('Chat connection error. Please check server and network.', 'error');
             };
 
             ws.onclose = (event) => {
                 setIsChatConnected(false);
+                setIsGenerating(false); // Stop generating on disconnect
                 webSocketRef.current = null; // Clear ref on close
                 if (event.wasClean) {
                     addSystemMessage(`Chat disconnected (Code: ${event.code}).`);
@@ -145,13 +150,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
             }
             setMessages([]);
             setIsChatConnected(false);
+            setIsGenerating(false); // Reset generating state when disconnecting
             if (currentProject === null) { // Only show if project was explicitly closed/is null
                 addSystemMessage('Chat disconnected: No active project selected.');
             }
         }
     }, [currentProject, addSystemMessage, WS_BASE_URL]); const sendMessage = () => {
         const trimmedInput = inputValue.trim();
-        if (!trimmedInput) return;
+        if (!trimmedInput || isGenerating) return; // Don't send if already generating
 
         if (!webSocketRef.current || webSocketRef.current.readyState !== WebSocket.OPEN) {
             addSystemMessage('Cannot send message: Chat is not connected.', 'error');
@@ -166,6 +172,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
             timestamp: new Date().toISOString(),
         };
         setMessages(prev => [...prev, userMessage]);
+        setIsGenerating(true); // Start generating
 
         try {
             webSocketRef.current.send(JSON.stringify({ type: 'chat', text: trimmedInput }));
@@ -173,17 +180,21 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
         } catch (error) {
             console.error('Failed to send message via WebSocket:', error);
             addSystemMessage('Failed to send your message. Please try again.', 'error');
+            setIsGenerating(false); // Stop generating on error
             // Optionally, mark the user's message as failed in the UI
             setMessages(prev => prev.map(msg =>
                 msg.id === userMessage.id ? { ...msg, content: `${msg.content} (Sending failed)` } : msg
             ));
         }
-    };
-
-    const sendCommand = (command: ChatCommand) => {
+    }; const sendCommand = (command: ChatCommand) => {
         if (!webSocketRef.current || webSocketRef.current.readyState !== WebSocket.OPEN) {
             addSystemMessage('Cannot send command: Chat is not connected.', 'error');
             console.error('Attempted to send command, but WebSocket is not open or available.');
+            return;
+        }
+
+        if (isGenerating) {
+            addSystemMessage('Please wait for the current operation to complete before sending another command.', 'error');
             return;
         }
 
@@ -195,6 +206,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
             timestamp: new Date().toISOString(),
         };
         setMessages(prev => [...prev, commandMessage]);
+        setIsGenerating(true); // Start generating
 
         try {
             webSocketRef.current.send(JSON.stringify({
@@ -205,6 +217,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
         } catch (error) {
             console.error('Failed to send command via WebSocket:', error);
             addSystemMessage('Failed to send command. Please try again.', 'error');
+            setIsGenerating(false); // Stop generating on error
         }
     }; const contextValue: ChatContextType = {
         messages,
@@ -214,6 +227,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
         sendCommand,
         isChatConnected,
         chatError,
+        isGenerating,
     };
 
     return (

@@ -3,25 +3,26 @@ from typing import Optional
 from utils.Context import Context
 from utils.Project import Project
 from config import settings
+from agents.MultimodalMixin import MultimodalMixin
 
 
-class TextDocumentAgent:
+class TextDocumentAgent(MultimodalMixin):
     """
     Agent for generating and editing text documents (primarily Markdown).
     """
-    
     def __init__(self, model: str, project: Optional[Project] = None):
+        super().__init__()
         self.model = model
         self.project = project
         self.context = None
         if project:
             self.update_context(project)
-    
     def update_context(self, project: Project) -> None:
         """Update the agent with the current project context."""
         self.project = project
         self.context = project.context if project else None
-    
+        super().update_context(project)  # Call mixin's update_context
+
     def generate(self, project: Project, prompt: str) -> Optional[str]:
         """
         Generate a markdown document based on project context and prompt.
@@ -39,8 +40,7 @@ class TextDocumentAgent:
             
             # Build context information
             context_info = self._build_context_string()
-            
-            # Create the system message for document generation
+              # Create the system message for document generation
             system_message = f"""You are a technical documentation expert. Generate high-quality Markdown documents based on project data and requirements.
 
 Project Context:
@@ -55,12 +55,16 @@ Guidelines for document generation:
 - Include technical details when appropriate
 - Use tables for structured data representation
 - Add code examples if relevant to the tech stack
+- When images are provided, analyze them and include relevant insights about UI/UX design, functionality, or visual elements in the documentation
 
-Generate a comprehensive document that addresses the user's request while incorporating the project context."""
+Generate a comprehensive document that addresses the user's request while incorporating the project context and any visual information provided."""
+
+            # Prepare multimodal content for the user message
+            user_content = self._prepare_multimodal_content(f"Generate a document: {prompt}")
 
             messages = [
                 {"role": "system", "content": system_message},
-                {"role": "user", "content": f"Generate a document: {prompt}"}
+                {"role": "user", "content": user_content}
             ]
             
             # Use litellm to call the AI model

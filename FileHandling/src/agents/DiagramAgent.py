@@ -6,24 +6,25 @@ from utils.Project import Project
 from config import settings
 from agents.schema.ClassDiagramSchema import VALIDATE_SCHEMA_CLASS_DIAGRAM, JSON_CLASS_DIAGRAM_SCHEMA_STRING
 from agents.schema.SequenceDiagramSchema import VALIDATE_SCHEMA_SEQUENCE_DIAGRAM
+from agents.MultimodalMixin import MultimodalMixin
 
 
-class DiagramAgent:
+class DiagramAgent(MultimodalMixin):
     """
     Agent for generating UML diagrams in JSON format.
     """
-    
     def __init__(self, model: str, project: Optional[Project] = None):
+        super().__init__()
         self.model = model
         self.project = project
         self.context = None
         if project:
             self.update_context(project)
-    
     def update_context(self, project: Project) -> None:
         """Update the agent with the current project context."""
         self.project = project
         self.context = project.context if project else None
+        super().update_context(project)  # Call mixin's update_context
     
     def generate(self, project: Project, prompt: str) -> Optional[str]:
         """
@@ -48,8 +49,7 @@ class DiagramAgent:
             
             # Get the appropriate schema and example
             schema_info = self._get_diagram_schema(diagram_type)
-            
-            # Create the system message for diagram generation
+              # Create the system message for diagram generation
             system_message = f"""You are a UML diagram expert. Generate valid JSON representations of UML diagrams based on project data.
 
 Project Context:
@@ -65,12 +65,16 @@ Guidelines:
 - Base the diagram structure on the project's tech stack and requirements
 - Include relevant attributes and methods based on the CSV data if available
 - Ensure proper UML relationships and conventions
+- When images are provided, analyze them to understand the application structure, UI components, and data flow to create more accurate diagrams
 
 Generate a complete, valid JSON diagram that represents the project structure and requirements."""
 
+            # Prepare multimodal content for the user message
+            user_content = self._prepare_multimodal_content(f"Generate a {diagram_type} for this project: {prompt}")
+
             messages = [
                 {"role": "system", "content": system_message},
-                {"role": "user", "content": f"Generate a {diagram_type} for this project: {prompt}"}
+                {"role": "user", "content": user_content}
             ]
             
             # Use litellm to call the AI model
@@ -98,7 +102,210 @@ Generate a complete, valid JSON diagram that represents the project structure an
         except Exception as e:
             print(f"Error in DiagramAgent.generate: {e}")
             return None
+    def edit(self, instructions: str, current_content: str, project: Project) -> Optional[str]:
+        """
+        Edit an existing diagram JSON based on instructions using incremental changes.
+        
+        Args:
+            instructions: User instructions for how to modify the diagram
+            current_content: Current JSON content of the diagram
+            project: The current project instance
+            
+        Returns:
+            Modified diagram JSON string or None if editing fails
+        """
+        try:
+            # Ensure we have the latest project context
+            self.update_context(project)
+            
+            # Validate current content is valid JSON
+            try:
+                current_json = json.loads(current_content)
+            except json.JSONDecodeError:
+                print("Error: Current content is not valid JSON")
+                return None
+            
+            # Determine diagram type from current content
+            diagram_type = current_json.get("diagramType", "UML Class Diagram")
+            
+            # Build context information
+            context_info = self._build_context_string()
+            
+            # Create the system message for diagram editing
+            system_message = f"""You are a UML diagram expert. Analyze the user's instructions and return ONLY a JSON object describing the changes needed.
+
+Project Context:
+{context_info}
+
+Current Diagram Type: {diagram_type}
+
+Return a JSON object with this exact structure:
+{{
+  "changes": {{
+    "classes": {{
+      "add": [
+        {{
+          "name": "string", // Name of the class (e.g., "User", "Order")
+          "type": "string", // Type: "class", "abstract class", "interface" (default: "class")
+          "attributes": [
+            {{
+              "name": "string", // Attribute name (e.g., "userName", "orderId")
+              "type": "string", // Data type (e.g., "String", "int", "Date", "List<OrderItem>")
+              "visibility": "string" // "+ public", "- private", "# protected", "~ package" (default: "- private")
+            }}
+          ],
+          "methods": [
+            {{
+              "name": "string", // Method name (e.g., "login", "calculateTotal")
+              "parameters": [
+                {{
+                  "name": "string", // Parameter name (e.g., "username", "quantity")
+                  "type": "string" // Parameter data type (e.g., "String", "int")
+                }}
+              ],
+              "returnType": "string", // Return type (e.g., "boolean", "double", "void")
+              "visibility": "string", // "+ public", "- private", "# protected", "~ package" (default: "+ public")
+              "isAbstract": "boolean" // true if the method is abstract (optional, default: false)
+            }}
+          ]
+        }}
+      ],
+      "remove": ["ClassNameToRemove1", "ClassNameToRemove2"]
+    }},
+    "relationships": {{
+      "add": [
+        {{
+          "fromClass": "SourceClass",
+          "toClass": "TargetClass", 
+          "type": "inheritance|composition|aggregation|association|dependency",
+          "label": "optional label"
+        }}
+      ],
+      "remove": [
+        {{
+          "from": "SourceClass",
+          "to": "TargetClass",
+          "type": "relationship type to remove"
+        }}
+      ]
+    }}
+  }}
+}}
+
+Guidelines:
+- Return ONLY the JSON change object
+- Only include changes that are actually needed based on the instructions
+- Use empty arrays [] for sections with no changes
+- Be specific about class names and relationship types
+- When images are provided, use them to understand context for the changes"""
+
+            # Prepare multimodal content for the user message
+            user_content = self._prepare_multimodal_content(f"""Current diagram structure:
+{json.dumps(current_json, indent=2)}
+
+Instructions: {instructions}
+
+Return the JSON change object describing exactly what needs to be added or removed.""")
+
+            messages = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_content}
+            ]
+            
+            # Use litellm to call the AI model
+            response = litellm.completion(
+                model=self.model,
+                messages=messages,
+                api_key=settings.GEMINI_API_KEY
+            )
+            
+            content = response.choices[0].message.content
+            
+            # Try to extract JSON from the response
+            changes_json = self._extract_json(content)
+            
+            if changes_json:
+                try:
+                    changes = json.loads(changes_json)
+                    # Apply the changes to the current diagram
+                    modified_diagram = self._apply_changes(current_json, changes)
+                    return json.dumps(modified_diagram, indent=2)
+                except (json.JSONDecodeError, KeyError) as e:
+                    print(f"Error parsing changes JSON: {e}")
+                    return None
+            
+            print("Could not extract valid changes JSON from response")
+            return None
+            
+        except Exception as e:
+            print(f"Error in DiagramAgent.edit: {e}")
+            return None
     
+    def _apply_changes(self, current_diagram: dict, changes: dict) -> dict:
+        """Apply the specified changes to the current diagram."""
+        modified = current_diagram.copy()
+        
+        if "changes" not in changes:
+            return modified
+            
+        change_data = changes["changes"]
+        
+        # Apply class changes
+        if "classes" in change_data:
+            class_changes = change_data["classes"]
+            
+            # Remove classes
+            if "remove" in class_changes:
+                classes_to_remove = set(class_changes["remove"])
+                if "classes" in modified:
+                    modified["classes"] = [
+                        cls for cls in modified["classes"] 
+                        if cls.get("name") not in classes_to_remove
+                    ]
+            
+            # Add classes
+            if "add" in class_changes:
+                if "classes" not in modified:
+                    modified["classes"] = []
+                
+                for new_class in class_changes["add"]:
+                    # Check if class already exists
+                    existing_names = {cls.get("name") for cls in modified["classes"]}
+                    if new_class.get("name") not in existing_names:
+                        modified["classes"].append(new_class)
+        
+        # Apply relationship changes
+        if "relationships" in change_data:
+            rel_changes = change_data["relationships"]
+            
+            # Remove relationships
+            if "remove" in rel_changes:
+                if "relationships" in modified:
+                    for rel_to_remove in rel_changes["remove"]:
+                        modified["relationships"] = [
+                            rel for rel in modified["relationships"]
+                            if not (rel.get("fromClass") == rel_to_remove.get("from") and
+                                   rel.get("toClass") == rel_to_remove.get("to") and
+                                   rel.get("type") == rel_to_remove.get("type"))
+                        ]
+            
+            # Add relationships
+            if "add" in rel_changes:
+                if "relationships" not in modified:
+                    modified["relationships"] = []
+                
+                for new_rel in rel_changes["add"]:
+                    # Check if relationship already exists
+                    exists = any(
+                        rel.get("fromClass") == new_rel.get("fromClass") and
+                        rel.get("toClass") == new_rel.get("toClass") and
+                        rel.get("type") == new_rel.get("type")
+                        for rel in modified["relationships"]
+                    )
+                    if not exists:
+                        modified["relationships"].append(new_rel)
+        
+        return modified
     def _determine_diagram_type(self, prompt: str) -> str:
         """Determine the type of diagram from the prompt."""
         prompt_lower = prompt.lower()

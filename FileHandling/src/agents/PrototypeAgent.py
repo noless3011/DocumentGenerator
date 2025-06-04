@@ -3,14 +3,16 @@ from typing import Optional
 from utils.Context import Context
 from utils.Project import Project
 from config import settings
+from agents.MultimodalMixin import MultimodalMixin
 
 
-class PrototypeAgent:
+class PrototypeAgent(MultimodalMixin):
     """
     Agent for generating HTML prototypes/mockups based on project requirements.
     """
     
     def __init__(self, model: str, project: Optional[Project] = None):
+        super().__init__()
         self.model = model
         self.project = project
         self.context = None
@@ -21,6 +23,7 @@ class PrototypeAgent:
         """Update the agent with the current project context."""
         self.project = project
         self.context = project.context if project else None
+        super().update_context(project)  # Call mixin's update_context
     
     def generate(self, project: Project, prompt: str = None) -> Optional[str]:
         """
@@ -42,12 +45,18 @@ class PrototypeAgent:
             
             # Determine what type of prototype to generate based on context
             prototype_description = prompt or self._determine_prototype_type()
-            
-            # Create the system message for prototype generation
+              # Create the system message for prototype generation
             system_message = f"""You are a web developer and UI/UX expert. Generate complete, functional HTML prototypes based on project requirements.
 
 Project Context:
 {context_info}
+
+If images are provided, analyze them to understand:
+- Existing UI patterns and design elements
+- Color schemes and typography
+- Layout structures and component placement
+- User interface flows and interactions
+- Design consistency requirements
 
 Guidelines for HTML prototype generation:
 - Create a complete, standalone HTML file with embedded CSS and JavaScript
@@ -62,12 +71,19 @@ Guidelines for HTML prototype generation:
 - Use a consistent color scheme and typography
 - Make it mobile-responsive
 - Include sample data from the project context where relevant
+- If UI images are provided, incorporate their design patterns and styling
 
 The prototype should be a complete, working HTML page that demonstrates the application concept."""
 
+            # Prepare multimodal content with images (only sent on first message)
+            user_content = self._prepare_multimodal_content(
+                f"Generate an HTML prototype: {prototype_description}",
+                project
+            )
+
             messages = [
                 {"role": "system", "content": system_message},
-                {"role": "user", "content": f"Generate an HTML prototype: {prototype_description}"}
+                {"role": "user", "content": user_content}
             ]
             
             # Use litellm to call the AI model
@@ -128,6 +144,74 @@ The prototype should be a complete, working HTML page that demonstrates the appl
         else:
             return f"A web application interface for {self.context.project_name}"
     
+    def edit(self, instructions: str, current_content: str, project: Project) -> Optional[str]:
+        """
+        Edit existing HTML prototype content based on instructions.
+        
+        Args:
+            instructions: User instructions for how to modify the content
+            current_content: The current HTML content to be edited
+            project: The current project instance
+            
+        Returns:
+            Modified HTML content or None if editing fails
+        """
+        try:
+            # Ensure we have the latest project context
+            self.update_context(project)
+            
+            # Build context information
+            context_info = self._build_context_string()
+            
+            # Create the system message for editing
+            system_message = f"""You are a web developer and UI/UX expert. Edit the existing HTML prototype based on the user's instructions.
+
+    Project Context:
+    {context_info}
+
+    Guidelines for editing HTML prototypes:
+    - Maintain the existing structure unless specifically asked to change it
+    - Preserve working functionality while implementing requested changes
+    - Keep the design consistent with the existing style
+    - Ensure the modified HTML remains a complete, standalone file
+    - Use modern, responsive design principles for any new elements
+    - Maintain proper HTML5 structure and semantic elements
+    - Preserve accessibility features and add new ones as needed
+    - Keep CSS and JavaScript embedded within the HTML file
+    - Make sure all changes are compatible with the existing codebase
+    - If adding new features, integrate them seamlessly with existing ones
+    - Return the complete modified HTML file, not just the changes
+
+    Current HTML Content:
+    {current_content}
+
+    User Instructions: {instructions}
+
+    Please return the complete modified HTML file."""
+
+            messages = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": f"Edit the HTML prototype according to these instructions: {instructions}"}
+            ]
+            
+            # Use litellm to call the AI model
+            response = litellm.completion(
+                model=self.model,
+                messages=messages,
+                api_key=settings.GEMINI_API_KEY
+            )
+            
+            content = response.choices[0].message.content
+            
+            # Extract HTML from the response if it's in code blocks
+            html_content = self._extract_html(content)
+            
+            return html_content or content
+            
+        except Exception as e:
+            print(f"Error in PrototypeAgent.edit: {e}")
+            return None
+
     def _extract_html(self, content: str) -> Optional[str]:
         """Extract HTML from the AI response."""
         # Look for HTML within code blocks

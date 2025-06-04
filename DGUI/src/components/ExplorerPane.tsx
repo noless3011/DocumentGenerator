@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import ArticleIcon from '@mui/icons-material/Article';
 import ComputerIcon from '@mui/icons-material/Computer';
 import { useProjects } from '../provider/ProjectProvider';
+import CommandPanel from './ChatSideBar/CommandPanel';
 
 
 export enum DocumentType {
@@ -196,52 +197,53 @@ const ExplorerPane: React.FC<ExplorerPaneProps> = ({ onFileSelect }) => {
                 console.error("Error deleting file:", e);
             }
         }
-    };
-
-    return (
-        <div className="w-full h-full flex flex-col bg-gray-100 p-4">
-            <div className="flex justify-between items-center mb-4">
-                <h1 className="text-xl font-bold">Explorer Pane</h1>
-                <div className="relative" ref={addMenuRef}>
-                    <button
-                        onClick={() => setIsAddMenuOpen(prev => !prev)}
-                        className="p-1 rounded hover:bg-gray-200 focus:outline-none"
-                        aria-label="Add new document"
-                        title="Add new document"
-                    >
-                        <AddCircleOutlineIcon />
-                    </button>
-                    {isAddMenuOpen && (
-                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-xl z-50 border border-gray-200">
-                            <ul className="py-1">
-                                {Object.values(DocumentType).map((option) => (
-                                    <li key={option}>
-                                        <button
-                                            onClick={() => handleAddNewDocument(option as DocumentType)}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
-                                        >
-                                            {option.charAt(0).toUpperCase() + option.slice(1)}
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
+    }; return (
+        <div className="w-full h-full flex flex-col bg-gray-100">
+            <div className="p-4">
+                <div className="flex justify-between items-center mb-4">
+                    <h1 className="text-xl font-bold">Explorer Pane</h1>
+                    <div className="relative" ref={addMenuRef}>
+                        <button
+                            onClick={() => setIsAddMenuOpen(prev => !prev)}
+                            className="p-1 rounded hover:bg-gray-200 focus:outline-none"
+                            aria-label="Add new document"
+                            title="Add new document"
+                        >
+                            <AddCircleOutlineIcon />
+                        </button>
+                        {isAddMenuOpen && (
+                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-xl z-50 border border-gray-200">
+                                <ul className="py-1">
+                                    {Object.values(DocumentType).map((option) => (
+                                        <li key={option}>
+                                            <button
+                                                onClick={() => handleAddNewDocument(option as DocumentType)}
+                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
+                                            >
+                                                {option.charAt(0).toUpperCase() + option.slice(1)}
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                <div className="flex-grow overflow-auto">
+                    {documents.map((doc) => (
+                        <div onClick={() => handleDocumentClick(doc)} key={doc.id} className='hover:bg-gray-300 '>
+                            <DocumentItem
+                                name={doc.name}
+                                type={doc.type}
+                                isSelected={selectedDocument === doc.id}
+                                onRename={(newName) => handleRename(doc, newName)}
+                                onDelete={() => handleDelete(doc)}
+                            />
                         </div>
-                    )}
+                    ))}
                 </div>
             </div>
-            <div className="flex-grow overflow-auto">
-                {documents.map((doc) => (
-                    <div onClick={() => handleDocumentClick(doc)} key={doc.id} className='hover:bg-gray-300 '>
-                        <DocumentItem
-                            name={doc.name}
-                            type={doc.type}
-                            isSelected={selectedDocument === doc.id}
-                            onRename={(newName) => handleRename(doc, newName)}
-                            onDelete={() => handleDelete(doc)}
-                        />
-                    </div>
-                ))}
-            </div>
+            <CommandPanel />
         </div>
     );
 };
