@@ -43,9 +43,7 @@ const CommandPanel: React.FC = () => {
     const diagramTypes = [
         { value: 'UML Class Diagram', label: 'UML Class Diagram' },
         { value: 'Database Schema', label: 'Database Schema' },
-        { value: 'Flowchart', label: 'Flowchart' },
         { value: 'Sequence Diagram', label: 'Sequence Diagram' },
-        { value: 'Entity Relationship Diagram', label: 'Entity Relationship Diagram' },
         { value: 'Component Diagram', label: 'Component Diagram' },
         { value: 'Activity Diagram', label: 'Activity Diagram' },
         { value: 'Use Case Diagram', label: 'Use Case Diagram' },

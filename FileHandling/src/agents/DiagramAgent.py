@@ -6,6 +6,7 @@ from utils.Project import Project
 from config import settings
 from agents.schema.ClassDiagramSchema import VALIDATE_SCHEMA_CLASS_DIAGRAM, JSON_CLASS_DIAGRAM_SCHEMA_STRING
 from agents.schema.SequenceDiagramSchema import VALIDATE_SCHEMA_SEQUENCE_DIAGRAM
+from agents.schema.DatabaseDiagramSchema import VALIDATE_SCHEMA_DATABASE_DIAGRAM, JSON_DATABASE_DIAGRAM_SCHEMA_STRING
 from agents.MultimodalMixin import MultimodalMixin
 
 
@@ -322,7 +323,6 @@ Return the JSON change object describing exactly what needs to be added or remov
             return "Activity Diagram"
         else:
             return "UML Class Diagram"  # Default
-    
     def _get_diagram_schema(self, diagram_type: str) -> str:
         """Get the schema information for the specified diagram type."""
         if diagram_type == "UML Class Diagram":
@@ -364,6 +364,15 @@ Required JSON Structure:
 }
 
 The response must be valid JSON matching this structure."""
+        
+        elif diagram_type == "Database Diagram":
+            return f"""
+Target Diagram Type: Database Schema/ER Diagram
+
+Required JSON Schema:
+{JSON_DATABASE_DIAGRAM_SCHEMA_STRING}
+
+The response must be valid JSON matching this exact structure."""
         
         else:
             # Generic diagram structure
@@ -420,7 +429,6 @@ Adapt this structure based on the specific diagram type requested."""
                             break
         
         return None
-    
     def _validate_diagram_json(self, json_content: str, diagram_type: str) -> bool:
         """Validate the generated JSON against the expected schema."""
         try:
@@ -434,6 +442,8 @@ Adapt this structure based on the specific diagram type requested."""
                 return "diagramName" in data and "classes" in data
             elif diagram_type == "UML Sequence Diagram":
                 return "diagramName" in data and "participants" in data and "messages" in data
+            elif diagram_type == "Database Diagram":
+                return "diagramName" in data and "tables" in data
             else:
                 return "diagramName" in data
                 

@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { ClassDiagram } from '../models/ClassDiagram';
+import { DatabaseDiagram } from '../models/DatabaseDiagram';
 import ClassDiagramCanvas from '../components/DiagramComponents/ClassDiagramCanvas';
+import DatabaseDiagramCanvas from '../components/DiagramComponents/DatabaseDiagramCanvas';
 import { ReactFlowProvider } from '@xyflow/react';
 
 interface DiagramViewProps {
@@ -14,12 +16,14 @@ const DiagramView: React.FC<DiagramViewProps> = ({ fileDir, setLoading }) => {
     const loadDiagram = useCallback(() => {
         if (setLoading) {
             setLoading(true);
-        }
-        window.myAPI.readFileAsText(fileDir).then((data: string) => {
+        } window.myAPI.readFileAsText(fileDir).then((data: string) => {
             const jsonData = JSON.parse(data);
             if (jsonData.diagramType === "UML Class Diagram") {
                 const classDiagram = ClassDiagram.fromJSON(jsonData);
                 setDiagram(<div className="pt-4 w-full h-full"><ReactFlowProvider><ClassDiagramCanvas diagram={classDiagram} fileDir={fileDir}></ClassDiagramCanvas></ReactFlowProvider></div>);
+            } else if (jsonData.diagramType === "ER Diagram") {
+                const databaseDiagram = DatabaseDiagram.fromJSON(jsonData);
+                setDiagram(<div className="pt-4 w-full h-full"><ReactFlowProvider><DatabaseDiagramCanvas diagram={databaseDiagram} fileDir={fileDir}></DatabaseDiagramCanvas></ReactFlowProvider></div>);
             }
             // handle other diagram types here
 
