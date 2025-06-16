@@ -42,7 +42,7 @@ The application leverages Gemini AI to analyze input data and generate human-rea
 1. **Clone the repository**
 
    ```
-   git clone https://github.com/yourusername/DocumentGenerator.git
+   git clone https://github.com/noless3011/DocumentGenerator.git
    cd DocumentGenerator
    ```
 
