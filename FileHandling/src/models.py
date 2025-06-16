@@ -13,6 +13,7 @@ class ProjectCreateRequest(BaseModel):
 class ProjectFileEntry(BaseModel):
     path: str
     name: str
+    type: str 
     added_date: str # ISO format string
     modified_date: str # ISO format string
     size: int # in bytes
@@ -69,6 +70,8 @@ class FileUploadResponse(BaseModel):
     original_filename: str
     file_path: str # Actual path where file was saved (can include unique suffix)
     saved_filename: Optional[str] = None # The name it was saved as (if different from original)
+    file_type: Optional[str] = None # Type of file: "excel", "source", etc.
+    folder: Optional[str] = None # Where it was uploaded: "input", "processed"
 
 
 class SheetListResponse(BaseModel): # For /get-sheets response
@@ -94,6 +97,39 @@ class ProcessingResultResponse(BaseModel): # For /process-excel response
     status: str # Overall status: "success" if all OK, "partial" if some errors, "error" if all failed
     project_id: str
     results: Dict[str, Dict[str, ProcessingResultDetail]] # filename -> {sheetname_or_error_key: result_detail}
+
+class SheetPreviewResponse(BaseModel): # For /preview-sheet response
+    headers: List[str]
+    data: List[List[Any]]
+
+class SheetPreviewRequest(BaseModel): # For /preview-sheet request
+    filePath: str
+    sheetName: str
+
+class UnifiedFileUploadRequest(BaseModel):
+    file_type: str = Field(..., description="Type of file: 'excel' or 'source'")
+    target_folder: str = Field(..., description="Target folder: 'input' or 'processed'")
+
+class FileListResponse(BaseModel):
+    status: str
+    project_id: str
+    input_files: List[ProjectFileEntry] = []
+    processed_files: List[ProjectFileEntry] = []
+    errors: Optional[Dict[str, str]] = None
+
+class SourceFilePreviewRequest(BaseModel):
+    file_path: str
+    file_name: str
+    folder: str = Field(default="processed", description="Folder where file is located")
+
+class SourceFilePreviewResponse(BaseModel):
+    status: str
+    file_name: str
+    file_type: str
+    content: Optional[str] = None  # For text files
+    url: Optional[str] = None      # For image files
+    size: Optional[int] = None
+    error: Optional[str] = None
 
 # Generic responses
 class SimpleStatusResponse(BaseModel):

@@ -12,35 +12,31 @@ class ServeFileRequest(BaseModel):
     filePath: str
 
 @router.get("/serve/html/{project_id}/{filename}", tags=["Serve"], summary="Serve HTML File", response_class=HTMLResponse)
-async def serve_html_file(project_id: str, filename: str):
+async def serve_html_file(project_id: str, filename: str, current_project = Depends(get_current_project)):
     """
     Serve an HTML file from a project's output directory.
     """
     try:
-        # Construct the file path
-        # Project files are stored in ../../data/{project_id}/output/ relative to src/
-        base_path = Path("../../data") / project_id / "output"
-        file_path = base_path / filename
+        base_path = current_project.output_dir 
+        file_path = base_path +"/"+ filename
+        file_path = Path(file_path)
+        base_path = Path(base_path)
         
-        # Security check - ensure the file is within the allowed directory
         resolved_path = file_path.resolve()
         resolved_base = base_path.resolve()
-        
         if not str(resolved_path).startswith(str(resolved_base)):
             raise HTTPException(status_code=403, detail="Access denied")
-        
+
         # Check if file exists
         if not file_path.exists():
-            raise HTTPException(status_code=404, detail=f"HTML file not found: {filename}")
-        
-        # Check if it's an HTML file
-        if not filename.endswith(('.html', '.htm')):
-            raise HTTPException(status_code=400, detail="Only HTML files are supported")
-        
-        # Read and return the HTML content
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
+            raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+
+        if not file_path.is_file():
+            raise HTTPException(status_code=400, detail="Path is not a file")
+
+        # Read the HTML content
+        with open(file_path, 'r', encoding='utf-8') as file:
+            content = file.read()
         return HTMLResponse(content=content)
         
     except Exception as e:
@@ -102,3 +98,49 @@ async def serve_any_file(request: ServeFileRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error serving file: {str(e)}")
+
+@router.get("/serve/processed/{filename}", tags=["Serve"], summary="Serve File from Processed Folder")
+async def serve_processed_file(filename: str, current_project = Depends(get_current_project)):
+    """
+    Serve a file from the current project's processed directory.
+    """
+    try:
+        # Get the processed path from the current project
+        processed_path = Path(current_project.processed_dir)
+        file_path = processed_path / filename
+        
+        # Security check - ensure the file is within the allowed directory
+        resolved_path = file_path.resolve()
+        resolved_base = processed_path.resolve()
+        
+        if not str(resolved_path).startswith(str(resolved_base)):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Check if file exists
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+        
+        if not file_path.is_file():
+            raise HTTPException(status_code=400, detail="Path is not a file")
+        
+        # Determine content type based on file extension
+        file_extension = file_path.suffix.lower()
+        if file_extension in ['.png', '.jpg', '.jpeg']:
+            media_type = f"image/{file_extension[1:]}"  # Remove the dot
+            if file_extension == '.jpg':
+                media_type = "image/jpeg"
+        elif file_extension in ['.txt', '.csv']:
+            media_type = "text/plain"
+        elif file_extension in ['.html', '.htm']:
+            media_type = "text/html"
+        else:
+            media_type = "application/octet-stream"
+        
+        return FileResponse(
+            path=str(file_path),
+            media_type=media_type,
+            filename=file_path.name
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error serving processed file: {str(e)}")

@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = os.getenv('GEMINI_API_KEY', '') 
     print(f"GOOGLE_API_KEY: {GEMINI_API_KEY} ")  # Debugging line to check if the key is loaded
     ROOT_DIR: Path = Path(__file__).resolve().parent.parent
-    ALLOWED_UPLOAD_EXTENSIONS: set[str] = {'xlsx', 'xls'}
+    ALLOWED_UPLOAD_EXTENSIONS: set[str] = {'.xlsx', '.xls'}  # Excel files for processing
+    ALLOWED_SOURCE_EXTENSIONS: set[str] = {'.txt', '.csv', '.png', '.jpg', '.jpeg'}  # Source files
     PROJECTS_REGISTRY_FILE: Path = ROOT_DIR / 'projects_registry.json'
     APP_SECRET_KEY: str = os.getenv('APP_SECRET_KEY',os.urandom(24).hex())
 

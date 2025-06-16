@@ -4,6 +4,7 @@ import ArticleIcon from '@mui/icons-material/Article';
 import ComputerIcon from '@mui/icons-material/Computer';
 import { useProjects } from '../provider/ProjectProvider';
 import CommandPanel from './ChatSideBar/CommandPanel';
+import { create } from 'domain';
 
 
 export enum DocumentType {
@@ -169,11 +170,6 @@ const ExplorerPane: React.FC<ExplorerPaneProps> = ({ onFileSelect }) => {
         onFileSelect(doc.id, doc.filePath, doc.type);
     };
 
-    const handleAddNewDocument = (type: DocumentType) => {
-        createFile("Untitled", type);
-        setIsAddMenuOpen(false);
-    };
-
     const handleRename = async (doc: Document, newName: string) => {
         try {
             await renameFile(
@@ -203,30 +199,7 @@ const ExplorerPane: React.FC<ExplorerPaneProps> = ({ onFileSelect }) => {
                 <div className="flex justify-between items-center mb-4">
                     <h1 className="text-xl font-bold">Explorer Pane</h1>
                     <div className="relative" ref={addMenuRef}>
-                        <button
-                            onClick={() => setIsAddMenuOpen(prev => !prev)}
-                            className="p-1 rounded hover:bg-gray-200 focus:outline-none"
-                            aria-label="Add new document"
-                            title="Add new document"
-                        >
-                            <AddCircleOutlineIcon />
-                        </button>
-                        {isAddMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-xl z-50 border border-gray-200">
-                                <ul className="py-1">
-                                    {Object.values(DocumentType).map((option) => (
-                                        <li key={option}>
-                                            <button
-                                                onClick={() => handleAddNewDocument(option as DocumentType)}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
-                                            >
-                                                {option.charAt(0).toUpperCase() + option.slice(1)}
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
+
                     </div>
                 </div>
                 <div className="flex-grow overflow-auto">

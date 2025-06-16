@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, FileText, RefreshCw, ExternalLink } from 'lucide-react';
+import { useProjects } from '../../provider/ProjectProvider';
 
 interface PreviewAppViewProps {
     fileDir?: string;
@@ -25,17 +26,11 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ fileDir, setLoading }) 
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const { currentProject } = useProjects();
 
     // Extract project ID from fileDir path
     const getProjectId = (filePath: string): string | null => {
-        if (!filePath) return null;
-        // Extract project ID from path like: "d:\...\data\test_3_2f7b8850"
-        const parts = filePath.split(/[\\\/]/);
-        const dataIndex = parts.findIndex(part => part === 'data');
-        if (dataIndex >= 0 && dataIndex < parts.length - 1) {
-            return parts[dataIndex + 1];
-        }
-        return null;
+        return currentProject?.id || null;
     };
 
     const projectId = getProjectId(fileDir || '');
@@ -164,8 +159,8 @@ const PreviewAppView: React.FC<PreviewAppViewProps> = ({ fileDir, setLoading }) 
                                 key={file.filename}
                                 onClick={() => selectFile(file)}
                                 className={`px-3 py-2 rounded border flex items-center gap-2 ${selectedFile?.filename === file.filename
-                                        ? 'bg-blue-500 text-white border-blue-500'
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                    ? 'bg-blue-500 text-white border-blue-500'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                                     }`}
                             >
                                 <FileText className="h-4 w-4" />

@@ -6,7 +6,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPExce
 from typing import Annotated, Optional
 from pathlib import Path
 
-from utils.WebSocketManager import manager as global_ws_manager # Use the global manager for project updates
+from utils.WebSocketManager import chat_socket_manager as global_ws_manager # Use the global manager for project updates
 from utils.Project import Project
 from agents.IAgent import IAgent
 from dependencies import get_app_state, get_chat_agent, get_agent_instance, get_current_project
@@ -83,12 +83,10 @@ async def websocket_chat_endpoint(
                             doc_title = markdown_content.split('\n', 1)[0].strip().lstrip('#').strip()
                             filename = f"{doc_title.replace(' ', '_')}.md"
                             # Save to output dir
-                            output_file_path = await current_project_global.create_empty_file(filename, "output", markdown_content)
+                            output_file_path = await current_project_global.create_file(filename, "output", markdown_content)
                             if output_file_path:
-                                # await current_project_global.scan_and_update_files() # create_empty_file calls add_file_record which updates
-                                await current_project_global.save_metadata() # Save metadata after file creation
+                                await current_project_global.save_metadata() 
                                 await websocket.send_json({"type": "system_message", "text": f"Document '{os.path.basename(output_file_path)}' created."})
-                                # Project._broadcast_update is called by add_file_record
                             else:
                                 await websocket.send_json({"type": "error_message", "text": f"Failed to save document '{filename}'."})
                         else:
@@ -171,7 +169,7 @@ async def websocket_chat_endpoint(
                         if json_diagram_content:
                             diagram_type_cleaned = diagram_type_prompt.replace(" ", "_")
                             filename = f"{current_project_global.name}_{diagram_type_cleaned}_diagram.json"
-                            output_file_path = await current_project_global.create_empty_file(filename, "output", json_diagram_content)
+                            output_file_path = await current_project_global.create_file(filename, "output", json_diagram_content)
                             if output_file_path:
                                 await current_project_global.save_metadata()
                                 await websocket.send_json({"type": "system_message", "text": f"Diagram '{os.path.basename(output_file_path)}' generated."})
@@ -191,7 +189,7 @@ async def websocket_chat_endpoint(
                             filename = f"{current_project_global.name}_prototype.html"
                             # Prototypes might be better in 'processed' or a dedicated 'prototypes' folder
                             # For now, 'output' is fine.
-                            output_file_path = await current_project_global.create_empty_file(filename, "output", html_content)
+                            output_file_path = await current_project_global.create_file(filename, "output", html_content)
                             if output_file_path:
                                 await current_project_global.save_metadata()
                                 await websocket.send_json({"type": "system_message", "text": f"HTML Prototype '{os.path.basename(output_file_path)}' generated."})

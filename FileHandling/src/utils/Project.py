@@ -1,8 +1,9 @@
 import os
 import datetime
 import json
+from fastapi import File
 from typing import List, Dict, Optional, Any
-from .WebSocketManager import manager
+from .WebSocketManager import project_socket_manager
 from .Context import Context # Import the new Context class
 
 class Project:
@@ -46,7 +47,7 @@ class Project:
     async def _broadcast_update(self):
         """Broadcasts the current project state."""
         if self.id:
-            await manager.broadcast(self.id, self.to_dict())
+            await project_socket_manager.broadcast(self.id, self.to_dict())
 
     def to_dict(self) -> Dict[str, Any]:
         """Converts project object to a dictionary for broadcasting and saving."""
@@ -85,6 +86,34 @@ class Project:
         timestamp = int(datetime.datetime.now().timestamp() * 1000) # milliseconds for more uniqueness
         return f"{timestamp:x}"[-8:]
 
+    def _get_file_type_from_extension(self, file_name: str) -> str:
+        """
+        Determine file type from file extension.
+        
+        Args:
+            file_name: Name of the file
+            
+        Returns:
+            File type string based on extension
+        """
+        _, extension = os.path.splitext(file_name)
+        extension = extension.lower()
+        
+        if extension in ['.txt', '.md', '.csv']:
+            return 'text'
+        elif extension in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg']:
+            return 'image'
+        elif extension in ['.xlsx', '.xls']:
+            return 'excel'
+        elif extension in ['.pdf']:
+            return 'pdf'
+        elif extension in ['.json']:
+            return 'json'
+        elif extension in ['.html', '.htm']:
+            return 'html'
+        else:
+            return 'file'
+
     def get_preview_html_dir(self)->str:
         # Check output first, then processed for HTML files
         for file_list_key in ["output", "processed"]:
@@ -99,8 +128,6 @@ class Project:
 
     def get_csv_dirs(self) -> List[str]:
         """Get the list of paths to CSV files in the processed directory."""
-        # CSVs can also be in 'input' if they are source, or 'processed' if generated
-        # For context, 'processed' CSVs are usually what agents would consume after Excel processing.
         return [file["path"] for file in self.files["processed"] if file["path"].lower().endswith('.csv')]
 
     async def scan_and_update_files(self) -> None:
@@ -120,16 +147,13 @@ class Project:
                 for file_name in os.listdir(directory):
                     file_path = os.path.join(directory, file_name)
                     if os.path.isfile(file_path):
-                        if file_name.lower().endswith('.geometry.json'): # Skip specific helper files
-                            continue
-
-                        # Add file if it's not already tracked with this path
-                        # This simple check avoids duplicate entries if scan is called multiple times
-                        # A more robust check might involve IDs or more complex logic if files can be renamed externally
+                        if file_name.lower().endswith('.geometry.json'):
+                            continue           
                         if not any(f['path'] == file_path for f in self.files[type_key]):
                             self.files[type_key].append({
                                 "path": file_path,
                                 "name": file_name,
+                                "type": self._get_file_type_from_extension(file_name),
                                 "added_date": datetime.datetime.fromtimestamp(os.path.getctime(file_path)).isoformat(),
                                 "modified_date": datetime.datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(),
                                 "size": os.path.getsize(file_path)
@@ -140,6 +164,8 @@ class Project:
         self.modified_date = datetime.datetime.now()
         self.context.update_from_project() # Update context after file scan
         await self._broadcast_update()
+        print(f"Scanned and updated files for project {self.name}. Total files: {sum(len(v) for v in self.files.values())}")
+        print(self.files)
 
 
     def create_directory_structure(self) -> bool:
@@ -154,50 +180,12 @@ class Project:
             print(f"Error creating directory structure for {self.name}: {e}")
             return False
 
-    async def add_file_record(self, file_path: str, file_type: str, file_name: Optional[str] = None) -> bool:
+
+    async def create_file(self, file_name: str, file_type: str, content: str = "") -> Optional[str]:
         """
-        Adds a record of an existing file to the project's file list.
-        This is useful for files created by agents or other processes.
-        """
-        if file_type not in self.files:
-            print(f"Invalid file type: {file_type}")
-            return False
-
-        if not os.path.exists(file_path):
-            print(f"File not found at path: {file_path}")
-            return False
-
-        actual_file_name = file_name or os.path.basename(file_path)
-
-        # Avoid adding duplicates
-        if any(f['path'] == file_path for f in self.files[file_type]):
-            print(f"File {actual_file_name} already tracked in {file_type}.")
-            # Optionally update existing record's modified_date, size
-            for f_entry in self.files[file_type]:
-                if f_entry['path'] == file_path:
-                    f_entry["modified_date"] = datetime.datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
-                    f_entry["size"] = os.path.getsize(file_path)
-                    break
-        else:
-            self.files[file_type].append({
-                "path": file_path,
-                "name": actual_file_name,
-                "added_date": datetime.datetime.fromtimestamp(os.path.getctime(file_path)).isoformat(),
-                "modified_date": datetime.datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(),
-                "size": os.path.getsize(file_path)
-            })
-            self.files[file_type] = sorted(self.files[file_type], key=lambda x: x['name'])
-
-
-        self.modified_date = datetime.datetime.now()
-        self.context.update_from_project() # Context might depend on file lists
-        # await self.save_metadata() # Caller should decide when to save metadata explicitly
-        await self._broadcast_update()
-        return True
-
-
-    async def create_empty_file(self, file_name: str, file_type: str, content: str = "") -> Optional[str]:
-        """
+        file_name: Name of the file to create (without path).
+        file_type: Type of the file ('input', 'processed', 'output').
+        content: Initial content to write into the file (default is empty).
         Create a new empty file (or with initial content) in the project directory.
         If a file with the same name exists, appends a number to make it unique.
         Returns the path to the created file or None on failure.
@@ -215,7 +203,7 @@ class Project:
         if not dest_dir:
             print(f"Unknown file type for destination directory: {file_type}")
             return None
-
+        
         original_file_name, file_extension = os.path.splitext(file_name)
         current_file_name = file_name
         new_file_path = os.path.join(dest_dir, current_file_name)
@@ -225,42 +213,75 @@ class Project:
             current_file_name = f"{original_file_name}_{counter}{file_extension}"
             new_file_path = os.path.join(dest_dir, current_file_name)
             counter += 1
-
         try:
             with open(new_file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
 
-            await self.add_file_record(new_file_path, file_type, current_file_name)
-            # self.modified_date and _broadcast_update are handled by add_file_record
+            await self.add_file(new_file_path, file_type, current_file_name)
+            print(f"Created file: {new_file_path}")
+            
             return new_file_path
         except Exception as e:
             print(f"Error creating file {current_file_name}: {e}")
             return None
 
-    async def delete_file(self, file_name: str, file_type: str) -> bool:
+    async def add_file(self, file_path: str, file_type: str, file_name: Optional[str] = None) -> bool:
+        """
+        Adds a file record to the project metadata.
+        file_path: Full path to the file that has already been saved.
+        file_type: Type of the file ('input', 'processed', 'output').
+        file_name: Optional name to use for the file (if None, uses the base name from file_path).
+        Returns True if successful, False otherwise.
+        """
         if file_type not in self.files:
             print(f"Invalid file type: {file_type}")
             return False
+        
+        if not file_name:
+            file_name = os.path.basename(file_path)
 
-        file_to_delete = None
-        for i, file_info in enumerate(self.files[file_type]):
+        # Verify the file actually exists
+        if not os.path.exists(file_path):
+            print(f"File {file_path} does not exist on disk. Cannot add to project.")
+            return False        # Check if file is already tracked
+        if any(f['path'] == file_path for f in self.files[file_type]):
+            print(f"File {file_path} already tracked in {file_type} directory.")
+            return True  # Return True since it's already added
+
+        try:
+            # Use scan_and_update_files to refresh file list instead of direct manipulation
+            await self.scan_and_update_files()
+            self.modified_date = datetime.datetime.now()
+            return True
+        except Exception as e:
+            print(f"Error adding file {file_name} to {file_type}: {e}")
+            return False
+        
+    
+    async def delete_file(self, file_name: str, file_type: str) -> bool:
+        """
+        Deletes a file from the project metadata and filesystem by name.
+        file_name: Name of the file to delete.
+        file_type: Type of the file ('input', 'processed', 'output').
+        Returns True if successful, False otherwise.
+        """
+        if file_type not in self.files:
+            print(f"Invalid file type: {file_type}")
+            return False        
+        for file_info in self.files[file_type]:
             if file_info["name"] == file_name:
-                file_to_delete = file_info
                 try:
                     os.remove(file_info["path"])
-                    del self.files[file_type][i]
+                    # Use scan_and_update_files to refresh file list instead of direct manipulation
+                    await self.scan_and_update_files()
                     self.modified_date = datetime.datetime.now()
-                    self.context.update_from_project()
-                    await self._broadcast_update()
                     return True
                 except Exception as e:
-                    print(f"Error deleting file {file_name} ({file_info['path']}): {e}")
+                    print(f"Error deleting file {file_name}: {e}")
                     return False
 
-        if not file_to_delete:
-            print(f"File '{file_name}' not found in type '{file_type}' for deletion.")
-        return False
-
+        print(f"File '{file_name}' not found in type '{file_type}' for deletion.")
+        return False    
     async def rename_file(self, file_name: str, new_name: str, file_type: str) -> bool:
         if file_type not in self.files:
             print(f"Invalid file type: {file_type}")
@@ -276,7 +297,7 @@ class Project:
             print(f"Unknown file type for destination directory: {file_type}")
             return False
 
-        for i, file_info in enumerate(self.files[file_type]):
+        for file_info in self.files[file_type]:
             if file_info["name"] == file_name:
                 old_path = file_info["path"]
                 if not os.path.exists(old_path):
@@ -288,7 +309,6 @@ class Project:
                          print(f"File {file_name} still not found after rescan. Cannot rename.")
                          return False
 
-
                 new_path = os.path.join(dest_dir, new_name)
 
                 if os.path.exists(new_path):
@@ -296,14 +316,9 @@ class Project:
                     return False
                 try:
                     os.rename(old_path, new_path)
-                    self.files[file_type][i]["path"] = new_path
-                    self.files[file_type][i]["name"] = new_name
-                    self.files[file_type][i]["modified_date"] = datetime.datetime.now().isoformat()
-                    self.files[file_type] = sorted(self.files[file_type], key=lambda x: x['name'])
-
+                    # Use scan_and_update_files to refresh file list instead of direct manipulation
+                    await self.scan_and_update_files()
                     self.modified_date = datetime.datetime.now()
-                    self.context.update_from_project()
-                    await self._broadcast_update()
                     return True
                 except Exception as e:
                     print(f"Error renaming file {file_name} to {new_name}: {e}")

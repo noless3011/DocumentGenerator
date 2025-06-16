@@ -46,14 +46,13 @@ const createWindow = (): void => {
   });
 
   
-
   mainWindow.webContents.session.webRequest.onHeadersReceived(
     {urls: ['*://*/*']},
     (details, callback) => {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
-          'Content-Security-Policy': ["default-src 'self'; connect-src 'self' http://localhost:5000 ws://localhost:5000; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' http://localhost:5000;"],
+          'Content-Security-Policy': ["default-src 'self'; connect-src 'self' http://localhost:5000 ws://localhost:5000; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: http://localhost:5000; frame-src 'self' http://localhost:5000;"],
         }
       });
     }

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'; // Removed useCallback as it might not be used directly after changes
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback, useMemo } from 'react';
 import { Project } from '../models/Project'; // Assuming DocumentType is also in Project or a similar path
 import { DocumentType } from './WorkspaceProvider';
 
@@ -12,10 +12,14 @@ interface ProjectContextType {
     createProject: (projectData: { project_name: string, base_dir: string }) => Promise<Project>;
     loadProject: (id: string) => Promise<void>;
     closeProject: () => Promise<void>;
-    createFile: (fileName: string, fileType: DocumentType) => Promise<void>;
+    createFile: (fileName: string, fileType: DocumentType, diagram_type?: string) => Promise<void>;
     deleteFile: (fileName: string, fileType: DocumentType) => Promise<void>;
+    deleteFileFromFolder: (fileName: string, folder: 'input' | 'processed') => Promise<void>;
     renameFile: (oldFileName: string, newFileName: string, fileType: DocumentType) => Promise<void>;
-    getProjectDetails: () => Promise<Project>;
+    getProjectDetails: () => Promise<Project | null>;
+    uploadFile: (file: File, folder: 'input' | 'processed') => Promise<void>;
+    getProcessedFiles: () => Promise<any[]>;
+    projectFiles: any[];
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -29,6 +33,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
     const [currentProject, setCurrentProject] = useState<Project | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [projectFiles, setProjectFiles] = useState<any[]>([]);
     const API_BASE_URL = 'http://localhost:5000/projects';
     const WS_BASE_URL = 'ws://localhost:5000/projects';
 
@@ -41,6 +46,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             setError(null);
             try {
                 const details = await getProjectDetails();
+
                 if (details && details.id) {
                     // A project is already open in the backend
                     setCurrentProject(details);
@@ -70,36 +76,52 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
 
     useEffect(() => {
         if (currentProject && currentProject.id) {
+            // Check if WebSocket is already connected to prevent duplicates in StrictMode
+            if (webSocketRef.current &&
+                webSocketRef.current.readyState === WebSocket.OPEN &&
+                webSocketRef.current.url.endsWith(`/ws/${currentProject.id}`)) {
+                console.log(`[ProjectContext] WebSocket already connected to project: ${currentProject.id}`);
+                return;
+            }
+
+            // Close any existing connection before creating a new one
+            if (webSocketRef.current) {
+                webSocketRef.current.close();
+                webSocketRef.current = null;
+            }
+
             // Connect Project WebSocket
             const wsUrl = `${WS_BASE_URL}/ws/${currentProject.id}`;
             const ws = new WebSocket(wsUrl);
-            webSocketRef.current = ws;
-
-            ws.onopen = () => {
-                console.log(`[ProjectContext] WebSocket connected to project: ${currentProject.id}`);
+            webSocketRef.current = ws; ws.onopen = () => {
+                console.log(`[ProjectContext] WebSocket_project connected to project: ${currentProject.id}`);
             };
-
             ws.onmessage = (event) => {
                 try {
+                    console.log(`[ProjectContext] WebSocket message received for project: ${currentProject?.id}`, event.data);
                     const projectUpdateData = JSON.parse(event.data as string) as Project;
-                    if (projectUpdateData && currentProject && projectUpdateData.id === currentProject.id) {
+                    if (projectUpdateData) {
+                        // Update current project if it matches
                         setCurrentProject(prevProject => {
-                            // Ensure prevProject is not null before spreading
-                            const newProjectState = { ...(prevProject || {}), ...projectUpdateData };
-                            return newProjectState as Project;
+                            if (prevProject && projectUpdateData.id === prevProject.id) {
+                                const newProjectState = { ...prevProject, ...projectUpdateData };
+                                return newProjectState as Project;
+                            }
+                            return prevProject;
                         });
-                    } else if (projectUpdateData && currentProject && projectUpdateData.id !== currentProject.id) {
-                        setProjects(prevProjects => prevProjects.map(p => p.id === projectUpdateData.id ? { ...p, ...projectUpdateData } : p));
-                    } else if (projectUpdateData && !currentProject) {
-                        setProjects(prevProjects => prevProjects.map(p => p.id === projectUpdateData.id ? { ...p, ...projectUpdateData } : p));
+
+                        // Always update projects list
+                        setProjects(prevProjects =>
+                            prevProjects.map(p =>
+                                p.id === projectUpdateData.id ? { ...p, ...projectUpdateData } : p
+                            )
+                        );
                     }
                 } catch (e) {
                     console.error('[ProjectContext] Error processing WebSocket message:', e);
                 }
-            };
-
-            ws.onerror = (err) => {
-                console.error('[ProjectContext] WebSocket error for project:', currentProject.id, err);
+            }; ws.onerror = (err) => {
+                console.error('[ProjectContext] WebSocket error for project:', currentProject?.id, err);
             };
 
             ws.onclose = (event) => { // Added event parameter
@@ -125,13 +147,11 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             }
         }
     }, [currentProject?.id]); // REMOVED chatContext from dependencies
-
-
-    const getProjectById = (id: string): Project | undefined => {
+    const getProjectById = useCallback((id: string): Project | undefined => {
         return projects.find(project => project.id === id);
-    };
+    }, [projects]);
 
-    const fetchProjects = async (): Promise<void> => {
+    const fetchProjects = useCallback(async (): Promise<void> => {
         setLoading(true);
         setError(null);
         try {
@@ -153,9 +173,8 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         } finally {
             setLoading(false);
         }
-    };
-
-    const createProject = async (projectInput: { project_name: string, base_dir: string }): Promise<Project> => {
+    }, []);
+    const createProject = useCallback(async (projectInput: { project_name: string, base_dir: string }): Promise<Project> => {
         setLoading(true);
         setError(null);
         try {
@@ -185,14 +204,13 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
             const errorMessage = err instanceof Error ? err.message : 'Failed to create project';
             setError(errorMessage);
             console.error('[ProjectContext] Error creating project:', err);
-            setCurrentProject(null); // Explicitly clear current project on error
-            throw err; // Re-throw for the calling component to handle
+            setCurrentProject(null);
+            throw err;
         } finally {
             setLoading(false);
         }
-    };
-
-    const loadProject = async (id: string): Promise<void> => {
+    }, [fetchProjects]);
+    const loadProject = useCallback(async (id: string): Promise<void> => {
         setLoading(true);
         setError(null);
 
@@ -225,9 +243,8 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         } finally {
             setLoading(false);
         }
-    };
-
-    const closeProject = async (): Promise<void> => {
+    }, []);
+    const closeProject = useCallback(async (): Promise<void> => {
         setLoading(true);
         setError(null);
         try {
@@ -254,9 +271,8 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         } finally {
             setLoading(false);
         }
-    };
-
-    const getProjectDetails = async (): Promise<Project> => {
+    }, []);
+    const getProjectDetails = useCallback(async (): Promise<Project | null> => {
         setLoading(true);
         setError(null);
         try {
@@ -265,13 +281,14 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 headers: { 'Content-Type': 'application/json' },
                 mode: 'cors',
             });
+            console.log('[ProjectContext] getProjectDetails response:', response);
             if (!response.ok) {
                 // For getProjectDetails, if it's a 404 or similar indicating no active project,
                 // it might not be a "throwable" error for the initial load, but rather a state.
                 if (response.status === 404) {
                     // No project is actively loaded on the backend, which is a valid state.
                     setCurrentProject(null); // Ensure frontend reflects this
-                    return null as any; // Or an appropriate empty Project-like structure / specific return
+                    return null; // Return null instead of null as any
                 }
                 let errorDetail = `Failed to get project details: ${response.status}`;
                 try {
@@ -297,9 +314,8 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         } finally {
             setLoading(false);
         }
-    };
-
-    const createFile = async (fileName: string, fileType: DocumentType) => {
+    }, []);
+    const createFile = useCallback(async (fileName: string, fileType: DocumentType, diagram_type?: string) => {
         setLoading(true);
         setError(null);
         try {
@@ -315,10 +331,14 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
                 return;
             }
 
-            const response = await fetch(`${API_BASE_URL}/create-output`, {
+            let req_body = JSON.stringify({ file_name: builtFileName, file_type: "processed", document_type: fileType });
+
+            if (fileType === DocumentType.DIAGRAM && diagram_type) {
+                req_body = JSON.stringify({ file_name: builtFileName, file_type: "processed", document_type: fileType, diagram_type: diagram_type });
+            } const response = await fetch(`${API_BASE_URL}/create-output`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ file_name: builtFileName }),
+                body: req_body,
                 mode: 'cors',
             });
             if (!response.ok) {
@@ -339,9 +359,8 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         } finally {
             setLoading(false);
         }
-    }
-
-    const deleteFile = async (fileName: string, fileType: DocumentType) => {
+    }, []);
+    const deleteFile = useCallback(async (fileName: string, fileType: DocumentType) => {
         setLoading(true);
         setError(null);
         try {
@@ -381,9 +400,62 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         } finally {
             setLoading(false);
         }
-    }
+    }, []);
+    const deleteFileFromFolder = useCallback(async (fileName: string, folder: 'input' | 'processed'): Promise<void> => {
+        if (!currentProject) {
+            throw new Error('No project is currently loaded');
+        }
 
-    const renameFile = async (oldFileName: string, newFileName: string, fileType: DocumentType) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            // Use the existing backend endpoint for deleting files from specific folders
+            const endpoint = folder === 'input'
+                ? `${API_BASE_URL}/remove-input`
+                : `${API_BASE_URL}/remove-processed`;
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_name: fileName }),
+                mode: 'cors',
+            });
+
+            if (!response.ok) {
+                let errorDetail = `Failed to delete file from ${folder}: ${response.status}`;
+                try {
+                    const errorResult = await response.json();
+                    errorDetail = errorResult.error || errorResult.detail || JSON.stringify(errorResult);
+                } catch (e) {
+                    console.error(`[ProjectContext] Delete File from ${folder} API could not parse error response body:`, e);
+                }
+                throw new Error(errorDetail);
+            }
+
+            // Update local state to remove the file
+            if (currentProject.files && currentProject.files[folder]) {
+                const updatedFiles = currentProject.files[folder].filter(file => file.name !== fileName);
+                setCurrentProject(prev => prev ? {
+                    ...prev,
+                    files: {
+                        ...prev.files,
+                        [folder]: updatedFiles
+                    }
+                } : null);
+            }
+
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : `Failed to delete file from ${folder}`;
+            setError(errorMessage);
+            console.error(`[ProjectContext] Error deleting file from ${folder}:`, err);
+            throw err;
+        } finally {
+            setLoading(false);
+        }
+    }, [currentProject]);
+
+    const renameFile = useCallback(async (oldFileName: string, newFileName: string, fileType: DocumentType) => {
         setLoading(true);
         setError(null);
         try {
@@ -427,9 +499,119 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         } finally {
             setLoading(false);
         }
-    }
+    }, []); // Empty dependency array since it doesn't depend on any state/props
 
-    const value: ProjectContextType = {
+    const uploadFile = useCallback(async (file: File, folder: 'input' | 'processed' = 'processed'): Promise<void> => {
+        if (!currentProject) {
+            throw new Error('No project is currently loaded');
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Determine the correct endpoint based on folder and file type
+            let endpoint = 'http://localhost:5000/files/upload-excel';
+
+            // For source files going to processed folder, we might need a different endpoint
+            if (folder === 'processed') {
+                // Check if it's a source file type (.txt, .csv, .png, .jpg, .jpeg)
+                const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+                const sourceTypes = ['.txt', '.csv', '.png', '.jpg', '.jpeg'];
+
+                if (sourceTypes.includes(fileExtension)) {
+                    // Use a generic file upload endpoint for source files
+                    endpoint = 'http://localhost:5000/files/upload-source';
+                }
+            }
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                body: formData,
+                mode: 'cors',
+            });
+
+            if (!response.ok) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || `Failed to upload file: ${response.status}`);
+            }
+
+            // Update project files after successful upload
+            if (currentProject.files) {
+                const updatedFiles = [...(currentProject.files[folder] || [])];
+                updatedFiles.push({
+                    path: '', // Will be set by backend
+                    name: file.name,
+                    added_date: new Date().toISOString()
+                });
+
+                setCurrentProject(prev => prev ? {
+                    ...prev,
+                    files: {
+                        ...prev.files,
+                        [folder]: updatedFiles
+                    }
+                } : null);
+            }
+
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Failed to upload file';
+            setError(errorMessage);
+            console.error('[ProjectContext] Error uploading file:', err);
+            throw err;
+        } finally {
+            setLoading(false);
+        }
+    }, [currentProject]); // Dependencies: currentProject    
+    const getProcessedFiles = useCallback(async (): Promise<any[]> => {
+        if (!currentProject) {
+            return [];
+        }
+
+        try {
+            // Make API call to fetch the latest processed files from backend
+            const response = await fetch('http://localhost:5000/files/list-all', {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+            });
+
+            if (!response.ok) {
+                console.error('Failed to fetch processed files:', response.status);
+                // Fallback to cached data if API fails
+                return currentProject.files?.processed || [];
+            }
+
+            const data = await response.json();
+            console.log('Fetched processed files from API:', data);
+
+            // Return processed files from the API response
+            return data.processed_files || [];
+        } catch (err) {
+            console.error('[ProjectContext] Error getting processed files:', err);
+            // Fallback to cached data if API fails
+            return currentProject.files?.processed || [];
+        }
+    }, [currentProject]);
+
+    // Update projectFiles when currentProject changes
+    React.useEffect(() => {
+        if (currentProject && currentProject.files) {
+            const allFiles = [
+                ...(currentProject.files.input || []),
+                ...(currentProject.files.processed || []),
+                ...(currentProject.files.output || [])
+            ];
+            setProjectFiles(allFiles);
+        } else {
+            setProjectFiles([]);
+        }
+    }, [currentProject]);
+
+    const value: ProjectContextType = useMemo(() => ({
         projects,
         currentProject,
         loading,
@@ -441,9 +623,31 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children }) =>
         closeProject,
         createFile,
         deleteFile,
+        deleteFileFromFolder,
         renameFile,
         getProjectDetails,
-    };
+        uploadFile,
+        getProcessedFiles,
+        projectFiles,
+    }), [
+        projects,
+        currentProject,
+        loading,
+        error,
+        fetchProjects,
+        getProjectById,
+        createProject,
+        loadProject,
+        closeProject,
+        createFile,
+        deleteFile,
+        deleteFileFromFolder,
+        renameFile,
+        getProjectDetails,
+        uploadFile,
+        getProcessedFiles,
+        projectFiles,
+    ]);
 
     return (
         <ProjectContext.Provider value={value}>
@@ -456,6 +660,14 @@ export const useProjects = (): ProjectContextType => {
     const context = useContext(ProjectContext);
     if (context === undefined) {
         throw new Error('useProjects must be used within a ProjectProvider');
+    }
+    return context;
+};
+
+export const useProjectContext = (): ProjectContextType => {
+    const context = useContext(ProjectContext);
+    if (context === undefined) {
+        throw new Error('useProjectContext must be used within a ProjectProvider');
     }
     return context;
 };

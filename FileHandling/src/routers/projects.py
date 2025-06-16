@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from utils.Project import Project
 from utils import RegistryHandler
-from utils.WebSocketManager import manager as global_ws_manager
+from utils.WebSocketManager import project_socket_manager
 from models import ProjectCreateRequest, ProjectInfo, ProjectListItem, SimpleStatusResponse, ErrorResponse
 from dependencies import get_app_state, get_optional_current_project, remove_chat_agent_for_project, get_current_project
 from agents.ChatAgent import ChatAgent # Import ChatAgent
@@ -22,7 +22,7 @@ router = APIRouter(
 # WebSocket endpoint for general project updates (distinct from chat)
 @router.websocket("/ws/{project_id}")
 async def websocket_project_updates_endpoint(websocket: WebSocket, project_id: str):
-    await global_ws_manager.connect(websocket, project_id)
+    await project_socket_manager.connect(websocket, project_id)
     try:
         while True:
             # This connection is primarily for server-to-client project updates.
@@ -33,11 +33,11 @@ async def websocket_project_updates_endpoint(websocket: WebSocket, project_id: s
                 await websocket.send_text("__pong__")
             # print(f"Received on project WebSocket for {project_id}: {data}") # For debugging
     except WebSocketDisconnect:
-        global_ws_manager.disconnect(websocket, project_id)
+        project_socket_manager.disconnect(websocket, project_id)
         print(f"Project update WebSocket disconnected for project {project_id}")
     except Exception as e:
         print(f"Error in project update WebSocket for project {project_id}: {e}")
-        global_ws_manager.disconnect(websocket, project_id)
+        project_socket_manager.disconnect(websocket, project_id)
 
 
 @router.get("/list", response_model=List[ProjectListItem], summary="List all projects")
@@ -128,24 +128,63 @@ async def create_project(
     RegistryHandler.save_projects_registry(projects_registry)
 
     project_info_response = ProjectInfo(**project.to_dict())
-    await global_ws_manager.broadcast(project.id, {"type":"project_loaded", "project_data": project_info_response.model_dump()})
+    await project_socket_manager.broadcast(project.id, {"type":"project_loaded", "project_data": project_info_response.model_dump()})
 
 
     return project_info_response
 
 @router.post("/create-output", response_model=SimpleStatusResponse, summary="Add a new output file")
 async def add_output_file(
+    current_project: Annotated[Project, Depends(get_current_project)],
     file_name: str = Body(..., embed=True),
-    current_project: Project = Depends(get_current_project) # Changed to non-optional
+    file_type: str = Body(..., embed=True),
+    document_type: str = Body(..., embed=True),
+    diagram_type: Optional[str] = Body(None, embed=True)
 ):
-    print("Adding output file to project:", file_name)
-    created_path = await current_project.create_empty_file(file_name, file_type="output")
-    if not created_path:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create output file '{file_name}'.")
-
-    await current_project.save_metadata() # create_empty_file calls add_file_record which broadcasts
-    # Broadcast handled by add_file_record inside create_empty_file
-    return SimpleStatusResponse(status="success", message=f"Output file '{os.path.basename(created_path)}' added successfully.")
+    """Create a new file with specified content in the input folder."""
+    if not file_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File name must be provided")
+    if not file_type:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type must be provided")
+    if not document_type:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document type must be provided")
+    if file_type not in ["input", "processed", "output"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type must be 'input', 'processed', or 'output'")
+    if document_type not in ["markdown", "diagram", "html"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document type must be 'markdown', 'diagram', or 'html'")
+    
+    # Ensure the target directory exists
+    target_dir_path = Path(current_project.input_dir if file_type == "input" else 
+                           current_project.processed_dir if file_type == "processed" else 
+                           current_project.output_dir)
+    target_dir_path.mkdir(parents=True, exist_ok=True)
+      # The frontend already sends the filename with the correct extension, so we don't need to add it again
+    concat_filename = file_name
+    init_content = (
+        "# New Document\n\n" if document_type == "markdown" else
+        "<html><body><h1>New Document</h1></body></html>" if document_type == "html" else
+'''{
+  "diagramType": "''' + (diagram_type or "UML Class Diagram") + '''",
+  "diagramName": "''' + file_name + '''",
+  "classes": [],
+  "relationships": []
+}''' if document_type == "diagram" else
+        ""
+    )
+    print(f"Creating file: {concat_filename} in {file_type} folder with initial content:\n{init_content}")
+    current_project.create_file(
+        file_name=concat_filename,
+        file_type=file_type,
+        content=init_content
+    )
+    return {
+        "status": "success",
+        "message": f"File '{concat_filename}' created successfully in {file_type} folder",
+        "project_id": current_project.id,
+        "file_name": concat_filename,
+        "file_type": file_type,
+        "document_type": document_type
+    }
 
 @router.post("/remove-output", response_model=SimpleStatusResponse, summary="Remove an output file")
 async def remove_output_file(
@@ -241,7 +280,7 @@ async def load_project(
     project_info_response = ProjectInfo(**loaded_project.to_dict())
     # Broadcast that this project is now loaded/active.
     # Clients connected to this project_id's WebSocket will receive this.
-    await global_ws_manager.broadcast(loaded_project.id, {"type":"project_loaded", "project_data": project_info_response.model_dump()})
+    await project_socket_manager.broadcast(loaded_project.id, {"type":"project_loaded", "project_data": project_info_response.model_dump()})
 
     return project_info_response
 
@@ -253,7 +292,7 @@ async def close_project_endpoint( # Renamed to avoid conflict with internal help
     closed_project_id = await close_project_internal(app_state)
     if closed_project_id:
         # Broadcast a specific message indicating project closure for this ID
-        await global_ws_manager.broadcast(closed_project_id, {"type": "project_closed", "project_id": closed_project_id})
+        await project_socket_manager.broadcast(closed_project_id, {"type": "project_closed", "project_id": closed_project_id})
         return SimpleStatusResponse(status="success", message="Project closed successfully")
     return SimpleStatusResponse(status="info", message="No active project to close.")
 

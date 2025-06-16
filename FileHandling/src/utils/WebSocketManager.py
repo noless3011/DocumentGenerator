@@ -40,4 +40,5 @@ class ConnectionManager:
                 self.disconnect(sock, project_id)
 
 
-manager = ConnectionManager()
+chat_socket_manager = ConnectionManager()
+project_socket_manager = ConnectionManager()

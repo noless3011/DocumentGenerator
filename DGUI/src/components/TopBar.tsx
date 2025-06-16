@@ -1,7 +1,7 @@
 import React from 'react';
 import ProjectManagingMenu from './DocumentsHandling/ProjectManagingMenu';
 import AIProviderMenu from './AIProviderMenu';
-import DocumentsHandlingMenu from './DocumentsHandlingMenu';
+import SourcesHandlingMenu from "./SourcesHandling/SourcesHandlingMenu"
 
 interface TopBarProps {
 
@@ -14,7 +14,7 @@ const TopBar: React.FC<TopBarProps> = (props) => {
             <div className="mx-2 h-6 w-px bg-gray-700 self-center"></div>
             <AIProviderMenu />
             <div className="mx-2 h-6 w-px bg-gray-700 self-center"></div>
-            <DocumentsHandlingMenu />
+            <SourcesHandlingMenu />
         </div>
     );
 };

@@ -10,7 +10,7 @@ app_state: dict = {
     "agent_instances": {}, # For general purpose agents (Text, Diagram, Proto)
     "chat_agents": {}      # For ChatAgents, keyed by project_id
 }
-
+excel_handler = ExcelFileHandler()  # Global instance for Excel file handling
 # --- Dependency Functions ---
 
 def get_app_state() -> dict:
@@ -19,7 +19,7 @@ def get_app_state() -> dict:
 
 def get_excel_handler() -> ExcelFileHandler:
     """Provides an instance of the ExcelFileHandler."""
-    return ExcelFileHandler()
+    return excel_handler
 
 def register_agent_instance(agent_name: str, agent: IAgent) -> None:
     """Registers a shared agent instance."""

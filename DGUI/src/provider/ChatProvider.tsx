@@ -1,23 +1,17 @@
-// filepath: d:\ProgrammingProjects\Javascript\DocumentGenerator\DGUI\src\provider\ChatProvider.tsx
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
-import { useProjects } from './ProjectProvider';
 import { Message } from '../models/Message';
-
-// Command interface to match backend expectations
-export interface ChatCommand {
-    name: string;
-    params: Record<string, any>;
-}
+import { useProjects } from './ProjectProvider';
 
 interface ChatContextType {
     messages: Message[];
     inputValue: string;
     setInputValue: (value: string) => void;
     sendMessage: () => void;
-    sendCommand: (command: ChatCommand) => void;
-    isChatConnected: boolean;
-    chatError: string | null;
+    sendCommand: (command: { name: string; params?: Record<string, any> }) => void;
+    isConnected: boolean;
     isGenerating: boolean;
+    clearMessages: () => void;
+    connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -29,209 +23,333 @@ interface ChatProviderProps {
 export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputValue, setInputValue] = useState<string>('');
-    const [isChatConnected, setIsChatConnected] = useState<boolean>(false);
-    const [chatError, setChatError] = useState<string | null>(null);
+    const [isConnected, setIsConnected] = useState<boolean>(false);
     const [isGenerating, setIsGenerating] = useState<boolean>(false);
+    const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
 
-    const webSocketRef = useRef<WebSocket | null>(null);
-    const { currentProject } = useProjects();
+    const { currentProject, getProjectDetails } = useProjects();
+    const chatWebSocketRef = useRef<WebSocket | null>(null);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectAttemptsRef = useRef<number>(0);
+    const maxReconnectAttempts = 5;
 
-    // WebSocket Base URL (consistent with ProjectProvider and chat.py endpoint structure)
-    const WS_BASE_URL = 'ws://localhost:5000';
-
-    const addSystemMessage = useCallback((content: string, type: 'system' | 'error' = 'system') => {
-        const systemMessage: Message = {
-            id: Date.now().toString() + Math.random().toString(), // Simple unique ID
-            content,
-            sender: 'system', // Keep sender as system, content can denote error
-            timestamp: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, systemMessage]);
-        if (type === 'error') {
-            setChatError(content);
-        }
+    // Generate unique message ID
+    const generateMessageId = useCallback(() => {
+        return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }, []);
 
-    useEffect(() => {
-        if (currentProject && currentProject.id) {
-            const projectId = currentProject.id;
-            const wsUrl = `${WS_BASE_URL}/ws/chat/${projectId}`;            // Clear previous state when project changes
-            setMessages([]);
-            setChatError(null);
-            setIsChatConnected(false);
-            setIsGenerating(false); // Reset generating state when connecting to new project
-            addSystemMessage(`Attempting to connect to chat for project: ${currentProject.name || projectId}...`);
+    // Add message to chat
+    const addMessage = useCallback((message: Omit<Message, 'id'>) => {
+        const newMessage: Message = {
+            ...message,
+            id: generateMessageId(),
+            timestamp: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, newMessage]);
+    }, [generateMessageId]);
 
-            if (webSocketRef.current) {
-                webSocketRef.current.onclose = null; // Avoid triggering old onclose logic
-                webSocketRef.current.close();
+    // Connect to chat WebSocket
+    const connectChatWebSocket = useCallback((projectId: string) => {
+        // Check if WebSocket is already connected to prevent duplicates in StrictMode
+        if (chatWebSocketRef.current &&
+            chatWebSocketRef.current.readyState === WebSocket.OPEN &&
+            chatWebSocketRef.current.url.endsWith(`/chat/${projectId}`)) {
+            console.log(`[ChatProvider] Chat WebSocket already connected to project: ${projectId}`);
+            return;
+        }
+
+        // Close any existing connection before creating a new one
+        if (chatWebSocketRef.current) {
+            chatWebSocketRef.current.close();
+        }
+
+        setConnectionStatus('connecting');
+        const wsUrl = `ws://localhost:5000/ws/chat/${projectId}`;
+        const ws = new WebSocket(wsUrl);
+        chatWebSocketRef.current = ws;
+
+        ws.onopen = () => {
+            console.log(`[ChatProvider] Chat WebSocket connected to project: ${projectId}`);
+            setIsConnected(true);
+            setConnectionStatus('connected');
+            reconnectAttemptsRef.current = 0;
+
+            // Add connection message
+            addMessage({
+                content: `Connected to chat for project ${projectId}`,
+                sender: 'system',
+                timestamp: new Date().toISOString(),
+                projectId
+            });
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data, projectId);
+            } catch (e) {
+                console.error('[ChatProvider] Error parsing WebSocket message:', e);
+                addMessage({
+                    content: 'Error parsing server message',
+                    sender: 'system',
+                    timestamp: new Date().toISOString(),
+                    projectId
+                });
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('[ChatProvider] Chat WebSocket error:', error);
+            setConnectionStatus('error');
+            addMessage({
+                content: 'Connection error occurred',
+                sender: 'system',
+                timestamp: new Date().toISOString(),
+                projectId
+            });
+        };
+
+        ws.onclose = (event) => {
+            console.log(`[ChatProvider] Chat WebSocket disconnected: Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`);
+            setIsConnected(false);
+            setConnectionStatus('disconnected');
+            setIsGenerating(false);
+
+            if (chatWebSocketRef.current === ws) {
+                chatWebSocketRef.current = null;
             }
 
-            const ws = new WebSocket(wsUrl);
-            webSocketRef.current = ws;
+            // Attempt to reconnect if it wasn't a clean close and we haven't exceeded max attempts
+            if (!event.wasClean && reconnectAttemptsRef.current < maxReconnectAttempts && currentProject?.id) {
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000); // Exponential backoff, max 30s
+                reconnectAttemptsRef.current++;
 
-            ws.onopen = () => {
-                setIsChatConnected(true);
-                setChatError(null);
-                addSystemMessage('Chat connected successfully.');
-                console.log(`Chat WebSocket connected for project ${projectId}`);
-            }; ws.onmessage = (event) => {
-                try {
-                    const receivedData = JSON.parse(event.data as string); if (receivedData.type === 'ai_response' && typeof receivedData.text === 'string') {
-                        const aiMessage: Message = {
-                            id: Date.now().toString() + Math.random().toString(),
-                            content: receivedData.text,
-                            sender: 'assistant',
-                            timestamp: new Date().toISOString(),
-                        };
-                        setMessages(prev => [...prev, aiMessage]);
-                        setIsGenerating(false); // AI has finished generating
-                    } else if (receivedData.type === 'error_message' && typeof receivedData.text === 'string') {
-                        addSystemMessage(`Server error: ${receivedData.text}`, 'error');
-                        console.error('Chat WebSocket error message from server:', receivedData.text);
-                        setIsGenerating(false); // Stop generating on error
-                    } else if (receivedData.type === 'system_message' && typeof receivedData.text === 'string') {
-                        addSystemMessage(receivedData.text);
-                    } else if (receivedData.type === 'file_content' && receivedData.filename && receivedData.content) {
-                        const fileMessage: Message = {
-                            id: Date.now().toString() + Math.random().toString(),
-                            content: receivedData.content,
-                            sender: 'system',
-                            timestamp: new Date().toISOString(),
-                            filename: receivedData.filename,
-                            language: receivedData.lang || 'text',
-                        };
-                        setMessages(prev => [...prev, fileMessage]);
-                        addSystemMessage(`File updated: ${receivedData.filename}`);
-                        setIsGenerating(false); // Command completed with file creation
-                    } else {
-                        console.warn('Received unknown message type or format:', receivedData);
-                        addSystemMessage('Received an unhandled message format from the server.');
+                console.log(`[ChatProvider] Attempting to reconnect in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+
+                reconnectTimeoutRef.current = setTimeout(() => {
+                    if (currentProject?.id) {
+                        connectChatWebSocket(currentProject.id);
                     }
-                } catch (e) {
-                    console.error('Failed to parse WebSocket message or handle it:', e);
-                    addSystemMessage('Error processing message from server.', 'error');
-                    setIsGenerating(false); // Stop generating on parse error
-                }
-            };
+                }, delay);
 
-            ws.onerror = (errorEvent) => {
-                console.error('Chat WebSocket error:', errorEvent);
-                setIsChatConnected(false);
-                setIsGenerating(false); // Stop generating on connection error
-                addSystemMessage('Chat connection error. Please check server and network.', 'error');
-            };
+                addMessage({
+                    content: `Connection lost. Reconnecting... (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
+                    sender: 'system',
+                    timestamp: new Date().toISOString(),
+                    projectId
+                });
+            } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+                addMessage({
+                    content: 'Maximum reconnection attempts reached. Please refresh the page.',
+                    sender: 'system',
+                    timestamp: new Date().toISOString(),
+                    projectId
+                });
+            }
+        };
+    }, [addMessage, currentProject?.id]);
 
-            ws.onclose = (event) => {
-                setIsChatConnected(false);
-                setIsGenerating(false); // Stop generating on disconnect
-                webSocketRef.current = null; // Clear ref on close
-                if (event.wasClean) {
-                    addSystemMessage(`Chat disconnected (Code: ${event.code}).`);
-                    console.log(`Chat WebSocket disconnected cleanly for project ${projectId}, Code: ${event.code}, Reason: ${event.reason}`);
-                } else {
-                    addSystemMessage(`Chat connection lost (Code: ${event.code}). You may need to reload or check the server.`, 'error');
-                    console.error(`Chat WebSocket connection lost for project ${projectId}, Code: ${event.code}`);
-                }
-            };
+    // Handle incoming WebSocket messages
+    const handleWebSocketMessage = useCallback((data: any, projectId: string) => {
+        switch (data.type) {
+            case 'ai_response':
+                setIsGenerating(false);
+                addMessage({
+                    content: data.text || 'No response received',
+                    sender: 'assistant',
+                    timestamp: new Date().toISOString(),
+                    projectId
+                });
+                break; case 'system_message':
+                setIsGenerating(false);
+                addMessage({
+                    content: data.text || 'System notification',
+                    sender: 'system',
+                    timestamp: new Date().toISOString(),
+                    projectId
+                });
 
-            return () => {
-                if (ws) {
-                    ws.onclose = null; // Prevent onclose from firing during cleanup if already handled
-                    ws.close();
-                    console.log(`Chat WebSocket connection for project ${projectId} closed on cleanup.`);
+                // If the message indicates a file was created/modified, refresh project data
+                const messageText = data.text || '';
+                if (messageText.includes('generated') ||
+                    messageText.includes('created') ||
+                    messageText.includes('saved') ||
+                    messageText.includes('Prototype') ||
+                    messageText.includes('Document') ||
+                    messageText.includes('Diagram')) {
+                    // Refresh project details to get updated file list
+                    getProjectDetails().catch(error => {
+                        console.error('[ChatProvider] Failed to refresh project after file creation:', error);
+                    });
                 }
-            };
+                break;
+
+            case 'error_message':
+                setIsGenerating(false);
+                addMessage({
+                    content: data.text || 'An error occurred',
+                    sender: 'system',
+                    timestamp: new Date().toISOString(),
+                    projectId
+                });
+                break;
+
+            case 'file_content':
+                addMessage({
+                    content: data.content || '',
+                    sender: 'assistant',
+                    timestamp: new Date().toISOString(),
+                    projectId,
+                    filename: data.filename,
+                    language: data.lang || data.language
+                });
+                break;
+
+            default:
+                console.warn('[ChatProvider] Unknown message type:', data.type);
+                break;
+        }
+    }, [addMessage, getProjectDetails]);
+
+    // Disconnect chat WebSocket
+    const disconnectChatWebSocket = useCallback(() => {
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
+
+        if (chatWebSocketRef.current) {
+            chatWebSocketRef.current.close();
+            chatWebSocketRef.current = null;
+        }
+
+        setIsConnected(false);
+        setConnectionStatus('disconnected');
+        setIsGenerating(false);
+        reconnectAttemptsRef.current = 0;
+    }, []);
+
+    // Send a text message
+    const sendMessage = useCallback(() => {
+        if (!inputValue.trim() || !isConnected || !chatWebSocketRef.current || isGenerating) {
+            return;
+        }
+
+        const userMessage = {
+            content: inputValue.trim(),
+            sender: 'user' as const,
+            timestamp: new Date().toISOString(),
+            projectId: currentProject?.id
+        };
+
+        // Add user message to chat
+        addMessage(userMessage);
+
+        // Send to server
+        const messageData = {
+            type: 'chat',
+            text: inputValue.trim()
+        };
+
+        try {
+            chatWebSocketRef.current.send(JSON.stringify(messageData));
+            setIsGenerating(true);
+            setInputValue('');
+        } catch (error) {
+            console.error('[ChatProvider] Error sending message:', error);
+            setIsGenerating(false);
+            addMessage({
+                content: 'Failed to send message. Please try again.',
+                sender: 'system',
+                timestamp: new Date().toISOString(),
+                projectId: currentProject?.id
+            });
+        }
+    }, [inputValue, isConnected, isGenerating, currentProject?.id, addMessage]);
+
+    // Send a command
+    const sendCommand = useCallback((command: { name: string; params?: Record<string, any> }) => {
+        if (!isConnected || !chatWebSocketRef.current || isGenerating) {
+            console.warn('[ChatProvider] Cannot send command: not connected or generating');
+            return;
+        }
+
+        const commandData = {
+            type: 'command',
+            name: command.name,
+            params: command.params || {}
+        };
+
+        try {
+            chatWebSocketRef.current.send(JSON.stringify(commandData));
+            setIsGenerating(true);
+
+            // Add command message to chat for user feedback
+            addMessage({
+                content: `Executing command: ${command.name}`,
+                sender: 'system',
+                timestamp: new Date().toISOString(),
+                projectId: currentProject?.id
+            });
+        } catch (error) {
+            console.error('[ChatProvider] Error sending command:', error);
+            setIsGenerating(false);
+            addMessage({
+                content: `Failed to execute command: ${command.name}`,
+                sender: 'system',
+                timestamp: new Date().toISOString(),
+                projectId: currentProject?.id
+            });
+        }
+    }, [isConnected, isGenerating, currentProject?.id, addMessage]);
+
+    // Clear all messages
+    const clearMessages = useCallback(() => {
+        setMessages([]);
+    }, []);    // Effect to handle project changes
+    useEffect(() => {
+        if (currentProject?.id) {
+            // Clear messages when switching projects
+            clearMessages();
+            connectChatWebSocket(currentProject.id);
         } else {
-            if (webSocketRef.current) {
-                webSocketRef.current.onclose = null;
-                webSocketRef.current.close();
-                webSocketRef.current = null;
+            disconnectChatWebSocket();
+        }
+
+        // Cleanup on unmount or project change
+        return () => {
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
             }
-            setMessages([]);
-            setIsChatConnected(false);
-            setIsGenerating(false); // Reset generating state when disconnecting
-            if (currentProject === null) { // Only show if project was explicitly closed/is null
-                addSystemMessage('Chat disconnected: No active project selected.');
+            // Ensure WebSocket is properly closed when project changes
+            if (chatWebSocketRef.current) {
+                chatWebSocketRef.current.close();
+                chatWebSocketRef.current = null;
             }
-        }
-    }, [currentProject, addSystemMessage, WS_BASE_URL]); const sendMessage = () => {
-        const trimmedInput = inputValue.trim();
-        if (!trimmedInput || isGenerating) return; // Don't send if already generating
-
-        if (!webSocketRef.current || webSocketRef.current.readyState !== WebSocket.OPEN) {
-            addSystemMessage('Cannot send message: Chat is not connected.', 'error');
-            console.error('Attempted to send message, but WebSocket is not open or available.');
-            return;
-        }
-
-        const userMessage: Message = {
-            id: Date.now().toString() + Math.random().toString(),
-            content: trimmedInput,
-            sender: 'user',
-            timestamp: new Date().toISOString(),
         };
-        setMessages(prev => [...prev, userMessage]);
-        setIsGenerating(true); // Start generating
+    }, [currentProject?.id, connectChatWebSocket, disconnectChatWebSocket, clearMessages]);
 
-        try {
-            webSocketRef.current.send(JSON.stringify({ type: 'chat', text: trimmedInput }));
-            setInputValue(''); // Clear input after successful send
-        } catch (error) {
-            console.error('Failed to send message via WebSocket:', error);
-            addSystemMessage('Failed to send your message. Please try again.', 'error');
-            setIsGenerating(false); // Stop generating on error
-            // Optionally, mark the user's message as failed in the UI
-            setMessages(prev => prev.map(msg =>
-                msg.id === userMessage.id ? { ...msg, content: `${msg.content} (Sending failed)` } : msg
-            ));
-        }
-    }; const sendCommand = (command: ChatCommand) => {
-        if (!webSocketRef.current || webSocketRef.current.readyState !== WebSocket.OPEN) {
-            addSystemMessage('Cannot send command: Chat is not connected.', 'error');
-            console.error('Attempted to send command, but WebSocket is not open or available.');
-            return;
-        }
-
-        if (isGenerating) {
-            addSystemMessage('Please wait for the current operation to complete before sending another command.', 'error');
-            return;
-        }
-
-        // Add user message showing the command being executed
-        const commandMessage: Message = {
-            id: Date.now().toString() + Math.random().toString(),
-            content: `Executing command: ${command.name}`,
-            sender: 'user',
-            timestamp: new Date().toISOString(),
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            disconnectChatWebSocket();
         };
-        setMessages(prev => [...prev, commandMessage]);
-        setIsGenerating(true); // Start generating
+    }, [disconnectChatWebSocket]);
 
-        try {
-            webSocketRef.current.send(JSON.stringify({
-                type: 'command',
-                name: command.name,
-                params: command.params
-            }));
-        } catch (error) {
-            console.error('Failed to send command via WebSocket:', error);
-            addSystemMessage('Failed to send command. Please try again.', 'error');
-            setIsGenerating(false); // Stop generating on error
-        }
-    }; const contextValue: ChatContextType = {
+    const value: ChatContextType = {
         messages,
         inputValue,
         setInputValue,
         sendMessage,
         sendCommand,
-        isChatConnected,
-        chatError,
+        isConnected,
         isGenerating,
+        clearMessages,
+        connectionStatus
     };
 
     return (
-        <ChatContext.Provider value={contextValue}>
+        <ChatContext.Provider value={value}>
             {children}
         </ChatContext.Provider>
     );
